@@ -894,6 +894,118 @@ void ZLIB_INTERNAL _tr_align(deflate_state *s) {
     bi_flush(s);
 }
 
+#ifdef Z_U8
+/* Put the eight bytes of b at p, low byte first. */
+local void put64le(uchf *p, Z_U8 b) {
+    Z_U8 one = 1;
+
+    if (*(unsigned char *)&one)
+        zmemcpy(p, &b, 8);
+    else {
+        int i;
+        for (i = 0; i < 8; i++) {
+            p[i] = (uch)b;
+            b >>= 8;
+        }
+    }
+}
+
+/* Add the n low bits of v to the 64-bit bit buffer bb holding bv bits. */
+#ifdef ZLIB_DEBUG
+#  define put_bits64(v, n) { \
+    Assert((n) > 0 && (n) <= 15, "invalid length"); \
+    s->bits_sent += (ulg)(n); \
+    bb |= (Z_U8)(v) << bv; \
+    bv += (n); }
+#else
+#  define put_bits64(v, n) { bb |= (Z_U8)(v) << bv; bv += (n); }
+#endif
+
+/* Store the whole bytes of bb at pend, keeping the remaining 0..7 bits. */
+#define flush_bits64() { \
+    put64le(buf + pend, bb); \
+    pend += bv >> 3; \
+    bb >>= bv & ~7U; \
+    bv &= 7; }
+
+/* ===========================================================================
+ * Send the block data compressed using the given Huffman trees. With a 64-bit
+ * type, the bits go through a local 64-bit buffer: a symbol adds at most 48
+ * bits (length code, extra length bits, distance code, extra distance bits),
+ * after which the whole bytes are stored with one eight-byte write. A write
+ * may reach up to seven bytes past the output so far, which stays clear of
+ * the unread symbols: see the overlay analysis in deflateInit2_(), which
+ * leaves at least 139 bits between them.
+ */
+local void compress_block(deflate_state *s, const ct_data *ltree,
+                          const ct_data *dtree) {
+    unsigned dist;      /* distance of matched string */
+    int lc;             /* match length or unmatched char (if dist == 0) */
+    unsigned sx = 0;    /* running index in symbol buffers */
+    unsigned code;      /* the code to send */
+    int extra;          /* number of extra bits to send */
+    uchf *buf = s->pending_buf;
+    ulg pend = s->pending;
+    Z_U8 bb = s->bi_buf;
+    unsigned bv = (unsigned)s->bi_valid;
+
+    if (bv >= 8)
+        flush_bits64();
+    if (s->sym_next != 0) do {
+#ifdef LIT_MEM
+        dist = s->d_buf[sx];
+        lc = s->l_buf[sx++];
+#else
+        dist = s->sym_buf[sx++] & 0xff;
+        dist += (unsigned)(s->sym_buf[sx++] & 0xff) << 8;
+        lc = s->sym_buf[sx++];
+#endif
+        if (dist == 0) {
+            put_bits64(ltree[lc].Code, ltree[lc].Len);  /* a literal byte */
+            Tracecv(isgraph(lc), (stderr," '%c' ", lc));
+        } else {
+            /* Here, lc is the match length - MIN_MATCH */
+            code = _length_code[lc];
+            put_bits64(ltree[code + LITERALS + 1].Code,
+                       ltree[code + LITERALS + 1].Len);  /* length code */
+            extra = extra_lbits[code];
+            if (extra != 0) {
+                lc -= base_length[code];
+                put_bits64(lc, extra);       /* the extra length bits */
+            }
+            dist--; /* dist is now the match distance - 1 */
+            code = d_code(dist);
+            Assert (code < D_CODES, "bad d_code");
+
+            put_bits64(dtree[code].Code, dtree[code].Len);  /* distance */
+            extra = extra_dbits[code];
+            if (extra != 0) {
+                dist -= (unsigned)base_dist[code];
+                put_bits64(dist, extra);     /* the extra distance bits */
+            }
+        } /* literal or match pair ? */
+        flush_bits64();
+
+        /* Check for no overlay of pending_buf on needed symbols */
+#ifdef LIT_MEM
+        Assert(pend < 2 * (s->lit_bufsize + sx), "pendingBuf overflow");
+#else
+        Assert(pend < s->lit_bufsize + sx, "pendingBuf overflow");
+#endif
+
+    } while (sx < s->sym_next);
+
+    put_bits64(ltree[END_BLOCK].Code, ltree[END_BLOCK].Len);
+    flush_bits64();
+    s->pending = pend;
+    s->bi_buf = (ush)bb;
+    s->bi_valid = (int)bv;
+}
+#undef put_bits64
+#undef flush_bits64
+
+#else /* !Z_U8 */
+
 /* ===========================================================================
  * Send the block data compressed using the given Huffman trees
  */
@@ -949,6 +1061,7 @@ local void compress_block(deflate_state *s, const ct_data *ltree,
 
     send_code(s, END_BLOCK, ltree);
 }
+#endif /* Z_U8 */
 
 /* ===========================================================================
  * Check if the data type is TEXT or BINARY, using the following algorithm:
