@@ -1,0 +1,499 @@
+# The gain of each zlib-turbo change, and of the variants tried and dropped (turbo/TECHNIQUES.md).
+# One core (2) of an AMD EPYC 9334, GCC 14.2 -O2, two rounds (r1, r2); TECHNIQUES.md takes the best of the two.
+# Builds: s0 zlib 1.3.2; s1 + decoder; s2 + Adler-32; s3 + match comparisons; s4 + bit writer; s5 + hash-table slide
+# (= zlib-turbo without the dictionary commits); s5v3 s5 with -march=x86-64-v3. Development builds: fast (changes 2-5
+# without the two-byte pre-checks), pc (with them, as kept), lm2 (pc + prefetch of the next candidate), pf (fast +
+# prefetch), dh (pc + direct hashing in the insertion loops), pc1 (pc with the pre-checks as one branch), ov (pc +
+# Zstandard-style short-distance copies in the decoder).
+# A: Adler-32 speed. C: compression of each corpus (S Silesia, CC Canterbury + Calgary, E enwik8), with a hash of the
+# output (identical for all builds). D: decompression, m0 one call, m1 16 KiB in / 64 KiB out pieces, MB/s.
+A r1 s0 adler32 3.88 GB/s whole, 3.88 GB/s in 16 KiB pieces (0)
+A r1 s2 adler32 5.55 GB/s whole, 5.54 GB/s in 16 KiB pieces (0)
+C r1 L1 S s0 TOTAL L1 ratio 2.7437 comp 114.24 MB/s hash af77fc6eb7e84ea4
+C r1 L1 S s1 TOTAL L1 ratio 2.7437 comp 113.99 MB/s hash af77fc6eb7e84ea4
+C r1 L1 S s2 TOTAL L1 ratio 2.7437 comp 115.20 MB/s hash af77fc6eb7e84ea4
+C r1 L1 S s3 TOTAL L1 ratio 2.7437 comp 123.00 MB/s hash af77fc6eb7e84ea4
+C r1 L1 S s4 TOTAL L1 ratio 2.7437 comp 134.15 MB/s hash af77fc6eb7e84ea4
+C r1 L1 S s5 TOTAL L1 ratio 2.7437 comp 150.94 MB/s hash af77fc6eb7e84ea4
+C r1 L1 S s5v3 TOTAL L1 ratio 2.7437 comp 151.81 MB/s hash af77fc6eb7e84ea4
+C r1 L1 S fast TOTAL L1 ratio 2.7437 comp 146.52 MB/s hash af77fc6eb7e84ea4
+C r1 L1 S pc TOTAL L1 ratio 2.7437 comp 150.82 MB/s hash af77fc6eb7e84ea4
+C r1 L1 S lm2 TOTAL L1 ratio 2.7437 comp 147.89 MB/s hash af77fc6eb7e84ea4
+C r1 L1 S pf TOTAL L1 ratio 2.7437 comp 144.59 MB/s hash af77fc6eb7e84ea4
+C r1 L1 S dh TOTAL L1 ratio 2.7437 comp 151.70 MB/s hash af77fc6eb7e84ea4
+C r1 L1 S pc1 TOTAL L1 ratio 2.7437 comp 153.70 MB/s hash af77fc6eb7e84ea4
+C r1 L1 CC s0 TOTAL L1 ratio 2.8810 comp 126.62 MB/s hash 0f0cdcf4213de713
+C r1 L1 CC s1 TOTAL L1 ratio 2.8810 comp 126.74 MB/s hash 0f0cdcf4213de713
+C r1 L1 CC s2 TOTAL L1 ratio 2.8810 comp 128.04 MB/s hash 0f0cdcf4213de713
+C r1 L1 CC s3 TOTAL L1 ratio 2.8810 comp 141.87 MB/s hash 0f0cdcf4213de713
+C r1 L1 CC s4 TOTAL L1 ratio 2.8810 comp 157.57 MB/s hash 0f0cdcf4213de713
+C r1 L1 CC s5 TOTAL L1 ratio 2.8810 comp 176.56 MB/s hash 0f0cdcf4213de713
+C r1 L1 CC s5v3 TOTAL L1 ratio 2.8810 comp 177.40 MB/s hash 0f0cdcf4213de713
+C r1 L1 CC fast TOTAL L1 ratio 2.8810 comp 169.95 MB/s hash 0f0cdcf4213de713
+C r1 L1 CC pc TOTAL L1 ratio 2.8810 comp 176.36 MB/s hash 0f0cdcf4213de713
+C r1 L1 CC lm2 TOTAL L1 ratio 2.8810 comp 171.73 MB/s hash 0f0cdcf4213de713
+C r1 L1 CC pf TOTAL L1 ratio 2.8810 comp 166.61 MB/s hash 0f0cdcf4213de713
+C r1 L1 CC dh TOTAL L1 ratio 2.8810 comp 177.61 MB/s hash 0f0cdcf4213de713
+C r1 L1 CC pc1 TOTAL L1 ratio 2.8810 comp 178.56 MB/s hash 0f0cdcf4213de713
+C r1 L1 E s0 TOTAL L1 ratio 2.3641 comp 99.11 MB/s hash da416787a9a43510
+C r1 L1 E s1 TOTAL L1 ratio 2.3641 comp 99.46 MB/s hash da416787a9a43510
+C r1 L1 E s2 TOTAL L1 ratio 2.3641 comp 100.10 MB/s hash da416787a9a43510
+C r1 L1 E s3 TOTAL L1 ratio 2.3641 comp 111.00 MB/s hash da416787a9a43510
+C r1 L1 E s4 TOTAL L1 ratio 2.3641 comp 122.63 MB/s hash da416787a9a43510
+C r1 L1 E s5 TOTAL L1 ratio 2.3641 comp 137.46 MB/s hash da416787a9a43510
+C r1 L1 E s5v3 TOTAL L1 ratio 2.3641 comp 138.38 MB/s hash da416787a9a43510
+C r1 L1 E fast TOTAL L1 ratio 2.3641 comp 133.26 MB/s hash da416787a9a43510
+C r1 L1 E pc TOTAL L1 ratio 2.3641 comp 137.59 MB/s hash da416787a9a43510
+C r1 L1 E lm2 TOTAL L1 ratio 2.3641 comp 134.26 MB/s hash da416787a9a43510
+C r1 L1 E pf TOTAL L1 ratio 2.3641 comp 131.58 MB/s hash da416787a9a43510
+C r1 L1 E dh TOTAL L1 ratio 2.3641 comp 137.94 MB/s hash da416787a9a43510
+C r1 L1 E pc1 TOTAL L1 ratio 2.3641 comp 137.96 MB/s hash da416787a9a43510
+C r1 L6 S s0 TOTAL L6 ratio 3.1067 comp 31.88 MB/s hash 834d090df99d0211
+C r1 L6 S s1 TOTAL L6 ratio 3.1067 comp 31.92 MB/s hash 834d090df99d0211
+C r1 L6 S s2 TOTAL L6 ratio 3.1067 comp 31.99 MB/s hash 834d090df99d0211
+C r1 L6 S s3 TOTAL L6 ratio 3.1067 comp 34.31 MB/s hash 834d090df99d0211
+C r1 L6 S s4 TOTAL L6 ratio 3.1067 comp 35.00 MB/s hash 834d090df99d0211
+C r1 L6 S s5 TOTAL L6 ratio 3.1067 comp 35.95 MB/s hash 834d090df99d0211
+C r1 L6 S s5v3 TOTAL L6 ratio 3.1067 comp 36.08 MB/s hash 834d090df99d0211
+C r1 L6 S fast TOTAL L6 ratio 3.1067 comp 34.30 MB/s hash 834d090df99d0211
+C r1 L6 S pc TOTAL L6 ratio 3.1067 comp 35.99 MB/s hash 834d090df99d0211
+C r1 L6 S lm2 TOTAL L6 ratio 3.1067 comp 35.25 MB/s hash 834d090df99d0211
+C r1 L6 S pf TOTAL L6 ratio 3.1067 comp 33.62 MB/s hash 834d090df99d0211
+C r1 L6 S dh TOTAL L6 ratio 3.1067 comp 35.85 MB/s hash 834d090df99d0211
+C r1 L6 S pc1 TOTAL L6 ratio 3.1067 comp 35.63 MB/s hash 834d090df99d0211
+C r1 L6 CC s0 TOTAL L6 ratio 3.3672 comp 26.71 MB/s hash 7f53727cd0eeb91d
+C r1 L6 CC s1 TOTAL L6 ratio 3.3672 comp 26.72 MB/s hash 7f53727cd0eeb91d
+C r1 L6 CC s2 TOTAL L6 ratio 3.3672 comp 26.79 MB/s hash 7f53727cd0eeb91d
+C r1 L6 CC s3 TOTAL L6 ratio 3.3672 comp 28.85 MB/s hash 7f53727cd0eeb91d
+C r1 L6 CC s4 TOTAL L6 ratio 3.3672 comp 29.38 MB/s hash 7f53727cd0eeb91d
+C r1 L6 CC s5 TOTAL L6 ratio 3.3672 comp 29.87 MB/s hash 7f53727cd0eeb91d
+C r1 L6 CC s5v3 TOTAL L6 ratio 3.3672 comp 29.95 MB/s hash 7f53727cd0eeb91d
+C r1 L6 CC fast TOTAL L6 ratio 3.3672 comp 28.50 MB/s hash 7f53727cd0eeb91d
+C r1 L6 CC pc TOTAL L6 ratio 3.3672 comp 29.87 MB/s hash 7f53727cd0eeb91d
+C r1 L6 CC lm2 TOTAL L6 ratio 3.3672 comp 29.13 MB/s hash 7f53727cd0eeb91d
+C r1 L6 CC pf TOTAL L6 ratio 3.3672 comp 27.75 MB/s hash 7f53727cd0eeb91d
+C r1 L6 CC dh TOTAL L6 ratio 3.3672 comp 29.80 MB/s hash 7f53727cd0eeb91d
+C r1 L6 CC pc1 TOTAL L6 ratio 3.3672 comp 29.56 MB/s hash 7f53727cd0eeb91d
+C r1 L6 E s0 TOTAL L6 ratio 2.7361 comp 24.30 MB/s hash ddb1c54c4c6e39ba
+C r1 L6 E s1 TOTAL L6 ratio 2.7361 comp 24.30 MB/s hash ddb1c54c4c6e39ba
+C r1 L6 E s2 TOTAL L6 ratio 2.7361 comp 24.41 MB/s hash ddb1c54c4c6e39ba
+C r1 L6 E s3 TOTAL L6 ratio 2.7361 comp 26.19 MB/s hash ddb1c54c4c6e39ba
+C r1 L6 E s4 TOTAL L6 ratio 2.7361 comp 26.71 MB/s hash ddb1c54c4c6e39ba
+C r1 L6 E s5 TOTAL L6 ratio 2.7361 comp 27.11 MB/s hash ddb1c54c4c6e39ba
+C r1 L6 E s5v3 TOTAL L6 ratio 2.7361 comp 27.23 MB/s hash ddb1c54c4c6e39ba
+C r1 L6 E fast TOTAL L6 ratio 2.7361 comp 26.10 MB/s hash ddb1c54c4c6e39ba
+C r1 L6 E pc TOTAL L6 ratio 2.7361 comp 27.20 MB/s hash ddb1c54c4c6e39ba
+C r1 L6 E lm2 TOTAL L6 ratio 2.7361 comp 26.92 MB/s hash ddb1c54c4c6e39ba
+C r1 L6 E pf TOTAL L6 ratio 2.7361 comp 25.63 MB/s hash ddb1c54c4c6e39ba
+C r1 L6 E dh TOTAL L6 ratio 2.7361 comp 27.17 MB/s hash ddb1c54c4c6e39ba
+C r1 L6 E pc1 TOTAL L6 ratio 2.7361 comp 26.92 MB/s hash ddb1c54c4c6e39ba
+C r1 L9 S s0 TOTAL L9 ratio 3.1332 comp 13.05 MB/s hash 3afae7e3f5ed15d8
+C r1 L9 S s1 TOTAL L9 ratio 3.1332 comp 13.03 MB/s hash 3afae7e3f5ed15d8
+C r1 L9 S s2 TOTAL L9 ratio 3.1332 comp 13.06 MB/s hash 3afae7e3f5ed15d8
+C r1 L9 S s3 TOTAL L9 ratio 3.1332 comp 13.92 MB/s hash 3afae7e3f5ed15d8
+C r1 L9 S s4 TOTAL L9 ratio 3.1332 comp 14.03 MB/s hash 3afae7e3f5ed15d8
+C r1 L9 S s5 TOTAL L9 ratio 3.1332 comp 14.17 MB/s hash 3afae7e3f5ed15d8
+C r1 L9 S s5v3 TOTAL L9 ratio 3.1332 comp 14.19 MB/s hash 3afae7e3f5ed15d8
+C r1 L9 S fast TOTAL L9 ratio 3.1332 comp 13.63 MB/s hash 3afae7e3f5ed15d8
+C r1 L9 S pc TOTAL L9 ratio 3.1332 comp 14.16 MB/s hash 3afae7e3f5ed15d8
+C r1 L9 S lm2 TOTAL L9 ratio 3.1332 comp 13.22 MB/s hash 3afae7e3f5ed15d8
+C r1 L9 S pf TOTAL L9 ratio 3.1332 comp 13.10 MB/s hash 3afae7e3f5ed15d8
+C r1 L9 S dh TOTAL L9 ratio 3.1332 comp 14.16 MB/s hash 3afae7e3f5ed15d8
+C r1 L9 S pc1 TOTAL L9 ratio 3.1332 comp 13.69 MB/s hash 3afae7e3f5ed15d8
+C r1 L9 CC s0 TOTAL L9 ratio 3.3864 comp 8.26 MB/s hash dffbf62f18289c08
+C r1 L9 CC s1 TOTAL L9 ratio 3.3864 comp 8.27 MB/s hash dffbf62f18289c08
+C r1 L9 CC s2 TOTAL L9 ratio 3.3864 comp 8.27 MB/s hash dffbf62f18289c08
+C r1 L9 CC s3 TOTAL L9 ratio 3.3864 comp 8.53 MB/s hash dffbf62f18289c08
+C r1 L9 CC s4 TOTAL L9 ratio 3.3864 comp 8.57 MB/s hash dffbf62f18289c08
+C r1 L9 CC s5 TOTAL L9 ratio 3.3864 comp 8.61 MB/s hash dffbf62f18289c08
+C r1 L9 CC s5v3 TOTAL L9 ratio 3.3864 comp 8.62 MB/s hash dffbf62f18289c08
+C r1 L9 CC fast TOTAL L9 ratio 3.3864 comp 8.50 MB/s hash dffbf62f18289c08
+C r1 L9 CC pc TOTAL L9 ratio 3.3864 comp 8.61 MB/s hash dffbf62f18289c08
+C r1 L9 CC lm2 TOTAL L9 ratio 3.3864 comp 7.73 MB/s hash dffbf62f18289c08
+C r1 L9 CC pf TOTAL L9 ratio 3.3864 comp 7.95 MB/s hash dffbf62f18289c08
+C r1 L9 CC dh TOTAL L9 ratio 3.3864 comp 8.61 MB/s hash dffbf62f18289c08
+C r1 L9 CC pc1 TOTAL L9 ratio 3.3864 comp 8.19 MB/s hash dffbf62f18289c08
+C r1 L9 E s0 TOTAL L9 ratio 2.7415 comp 18.96 MB/s hash a62a4f685d89cf56
+C r1 L9 E s1 TOTAL L9 ratio 2.7415 comp 18.94 MB/s hash a62a4f685d89cf56
+C r1 L9 E s2 TOTAL L9 ratio 2.7415 comp 18.96 MB/s hash a62a4f685d89cf56
+C r1 L9 E s3 TOTAL L9 ratio 2.7415 comp 20.11 MB/s hash a62a4f685d89cf56
+C r1 L9 E s4 TOTAL L9 ratio 2.7415 comp 20.47 MB/s hash a62a4f685d89cf56
+C r1 L9 E s5 TOTAL L9 ratio 2.7415 comp 20.74 MB/s hash a62a4f685d89cf56
+C r1 L9 E s5v3 TOTAL L9 ratio 2.7415 comp 20.77 MB/s hash a62a4f685d89cf56
+C r1 L9 E fast TOTAL L9 ratio 2.7415 comp 19.97 MB/s hash a62a4f685d89cf56
+C r1 L9 E pc TOTAL L9 ratio 2.7415 comp 20.70 MB/s hash a62a4f685d89cf56
+C r1 L9 E lm2 TOTAL L9 ratio 2.7415 comp 20.59 MB/s hash a62a4f685d89cf56
+C r1 L9 E pf TOTAL L9 ratio 2.7415 comp 19.70 MB/s hash a62a4f685d89cf56
+C r1 L9 E dh TOTAL L9 ratio 2.7415 comp 20.71 MB/s hash a62a4f685d89cf56
+C r1 L9 E pc1 TOTAL L9 ratio 2.7415 comp 20.46 MB/s hash a62a4f685d89cf56
+D r1 L1 S s0 m0 411.4
+D r1 L1 S s0 m1 384.2
+D r1 L1 S s1 m0 646.5
+D r1 L1 S s1 m1 566.3
+D r1 L1 S s2 m0 680.8
+D r1 L1 S s2 m1 593.3
+D r1 L1 S s5 m0 680.9
+D r1 L1 S s5 m1 592.0
+D r1 L1 S s5v3 m0 697.4
+D r1 L1 S s5v3 m1 612.0
+D r1 L1 S pc m0 681.1
+D r1 L1 S pc m1 592.6
+D r1 L1 S ov m0 674.8
+D r1 L1 S ov m1 587.4
+D r1 L1 CC s0 m0 446.7
+D r1 L1 CC s0 m1 418.7
+D r1 L1 CC s1 m0 723.5
+D r1 L1 CC s1 m1 626.4
+D r1 L1 CC s2 m0 766.3
+D r1 L1 CC s2 m1 660.4
+D r1 L1 CC s5 m0 764.3
+D r1 L1 CC s5 m1 655.2
+D r1 L1 CC s5v3 m0 804.7
+D r1 L1 CC s5v3 m1 697.3
+D r1 L1 CC pc m0 765.0
+D r1 L1 CC pc m1 657.6
+D r1 L1 CC ov m0 763.2
+D r1 L1 CC ov m1 655.7
+D r1 L1 E s0 m0 342.8
+D r1 L1 E s0 m1 317.6
+D r1 L1 E s1 m0 576.7
+D r1 L1 E s1 m1 478.8
+D r1 L1 E s2 m0 603.0
+D r1 L1 E s2 m1 496.6
+D r1 L1 E s5 m0 602.8
+D r1 L1 E s5 m1 495.0
+D r1 L1 E s5v3 m0 618.5
+D r1 L1 E s5v3 m1 513.5
+D r1 L1 E pc m0 603.4
+D r1 L1 E pc m1 496.2
+D r1 L1 E ov m0 600.9
+D r1 L1 E ov m1 493.7
+D r1 L6 S s0 m0 437.6
+D r1 L6 S s0 m1 408.8
+D r1 L6 S s1 m0 698.5
+D r1 L6 S s1 m1 618.0
+D r1 L6 S s2 m0 738.2
+D r1 L6 S s2 m1 648.6
+D r1 L6 S s5 m0 736.9
+D r1 L6 S s5 m1 648.8
+D r1 L6 S s5v3 m0 756.8
+D r1 L6 S s5v3 m1 668.3
+D r1 L6 S pc m0 738.5
+D r1 L6 S pc m1 648.7
+D r1 L6 S ov m0 731.5
+D r1 L6 S ov m1 644.7
+D r1 L6 CC s0 m0 468.3
+D r1 L6 CC s0 m1 436.4
+D r1 L6 CC s1 m0 817.1
+D r1 L6 CC s1 m1 704.9
+D r1 L6 CC s2 m0 860.9
+D r1 L6 CC s2 m1 754.8
+D r1 L6 CC s5 m0 873.1
+D r1 L6 CC s5 m1 754.4
+D r1 L6 CC s5v3 m0 911.7
+D r1 L6 CC s5v3 m1 789.4
+D r1 L6 CC pc m0 873.3
+D r1 L6 CC pc m1 755.0
+D r1 L6 CC ov m0 864.1
+D r1 L6 CC ov m1 746.8
+D r1 L6 E s0 m0 349.4
+D r1 L6 E s0 m1 323.2
+D r1 L6 E s1 m0 591.7
+D r1 L6 E s1 m1 506.0
+D r1 L6 E s2 m0 620.5
+D r1 L6 E s2 m1 527.7
+D r1 L6 E s5 m0 620.7
+D r1 L6 E s5 m1 526.6
+D r1 L6 E s5v3 m0 637.1
+D r1 L6 E s5v3 m1 546.0
+D r1 L6 E pc m0 620.6
+D r1 L6 E pc m1 528.3
+D r1 L6 E ov m0 613.7
+D r1 L6 E ov m1 522.6
+D r1 L9 S s0 m0 442.2
+D r1 L9 S s0 m1 412.5
+D r1 L9 S s1 m0 702.3
+D r1 L9 S s1 m1 618.9
+D r1 L9 S s2 m0 744.4
+D r1 L9 S s2 m1 653.0
+D r1 L9 S s5 m0 744.3
+D r1 L9 S s5 m1 649.7
+D r1 L9 S s5v3 m0 762.7
+D r1 L9 S s5v3 m1 672.2
+D r1 L9 S pc m0 744.4
+D r1 L9 S pc m1 652.8
+D r1 L9 S ov m0 737.3
+D r1 L9 S ov m1 646.6
+D r1 L9 CC s0 m0 474.0
+D r1 L9 CC s0 m1 440.6
+D r1 L9 CC s1 m0 824.7
+D r1 L9 CC s1 m1 719.2
+D r1 L9 CC s2 m0 882.4
+D r1 L9 CC s2 m1 760.1
+D r1 L9 CC s5 m0 881.1
+D r1 L9 CC s5 m1 758.8
+D r1 L9 CC s5v3 m0 917.6
+D r1 L9 CC s5v3 m1 791.9
+D r1 L9 CC pc m0 878.7
+D r1 L9 CC pc m1 760.7
+D r1 L9 CC ov m0 873.5
+D r1 L9 CC ov m1 752.5
+D r1 L9 E s0 m0 350.0
+D r1 L9 E s0 m1 325.2
+D r1 L9 E s1 m0 592.6
+D r1 L9 E s1 m1 506.7
+D r1 L9 E s2 m0 621.7
+D r1 L9 E s2 m1 527.3
+D r1 L9 E s5 m0 621.5
+D r1 L9 E s5 m1 528.3
+D r1 L9 E s5v3 m0 638.2
+D r1 L9 E s5v3 m1 546.4
+D r1 L9 E pc m0 621.5
+D r1 L9 E pc m1 527.6
+D r1 L9 E ov m0 614.2
+D r1 L9 E ov m1 520.6
+A r2 s0 adler32 3.88 GB/s whole, 3.88 GB/s in 16 KiB pieces (0)
+A r2 s2 adler32 5.55 GB/s whole, 5.54 GB/s in 16 KiB pieces (0)
+C r2 L1 S s0 TOTAL L1 ratio 2.7437 comp 114.26 MB/s hash af77fc6eb7e84ea4
+C r2 L1 S s1 TOTAL L1 ratio 2.7437 comp 114.28 MB/s hash af77fc6eb7e84ea4
+C r2 L1 S s2 TOTAL L1 ratio 2.7437 comp 115.28 MB/s hash af77fc6eb7e84ea4
+C r2 L1 S s3 TOTAL L1 ratio 2.7437 comp 122.97 MB/s hash af77fc6eb7e84ea4
+C r2 L1 S s4 TOTAL L1 ratio 2.7437 comp 134.05 MB/s hash af77fc6eb7e84ea4
+C r2 L1 S s5 TOTAL L1 ratio 2.7437 comp 150.93 MB/s hash af77fc6eb7e84ea4
+C r2 L1 S s5v3 TOTAL L1 ratio 2.7437 comp 151.58 MB/s hash af77fc6eb7e84ea4
+C r2 L1 S fast TOTAL L1 ratio 2.7437 comp 146.44 MB/s hash af77fc6eb7e84ea4
+C r2 L1 S pc TOTAL L1 ratio 2.7437 comp 151.05 MB/s hash af77fc6eb7e84ea4
+C r2 L1 S lm2 TOTAL L1 ratio 2.7437 comp 148.44 MB/s hash af77fc6eb7e84ea4
+C r2 L1 S pf TOTAL L1 ratio 2.7437 comp 144.09 MB/s hash af77fc6eb7e84ea4
+C r2 L1 S dh TOTAL L1 ratio 2.7437 comp 151.80 MB/s hash af77fc6eb7e84ea4
+C r2 L1 S pc1 TOTAL L1 ratio 2.7437 comp 153.50 MB/s hash af77fc6eb7e84ea4
+C r2 L1 CC s0 TOTAL L1 ratio 2.8810 comp 126.55 MB/s hash 0f0cdcf4213de713
+C r2 L1 CC s1 TOTAL L1 ratio 2.8810 comp 126.59 MB/s hash 0f0cdcf4213de713
+C r2 L1 CC s2 TOTAL L1 ratio 2.8810 comp 127.96 MB/s hash 0f0cdcf4213de713
+C r2 L1 CC s3 TOTAL L1 ratio 2.8810 comp 141.86 MB/s hash 0f0cdcf4213de713
+C r2 L1 CC s4 TOTAL L1 ratio 2.8810 comp 157.51 MB/s hash 0f0cdcf4213de713
+C r2 L1 CC s5 TOTAL L1 ratio 2.8810 comp 176.07 MB/s hash 0f0cdcf4213de713
+C r2 L1 CC s5v3 TOTAL L1 ratio 2.8810 comp 177.38 MB/s hash 0f0cdcf4213de713
+C r2 L1 CC fast TOTAL L1 ratio 2.8810 comp 170.36 MB/s hash 0f0cdcf4213de713
+C r2 L1 CC pc TOTAL L1 ratio 2.8810 comp 175.70 MB/s hash 0f0cdcf4213de713
+C r2 L1 CC lm2 TOTAL L1 ratio 2.8810 comp 171.38 MB/s hash 0f0cdcf4213de713
+C r2 L1 CC pf TOTAL L1 ratio 2.8810 comp 166.15 MB/s hash 0f0cdcf4213de713
+C r2 L1 CC dh TOTAL L1 ratio 2.8810 comp 177.01 MB/s hash 0f0cdcf4213de713
+C r2 L1 CC pc1 TOTAL L1 ratio 2.8810 comp 178.91 MB/s hash 0f0cdcf4213de713
+C r2 L1 E s0 TOTAL L1 ratio 2.3641 comp 99.41 MB/s hash da416787a9a43510
+C r2 L1 E s1 TOTAL L1 ratio 2.3641 comp 99.40 MB/s hash da416787a9a43510
+C r2 L1 E s2 TOTAL L1 ratio 2.3641 comp 100.18 MB/s hash da416787a9a43510
+C r2 L1 E s3 TOTAL L1 ratio 2.3641 comp 111.12 MB/s hash da416787a9a43510
+C r2 L1 E s4 TOTAL L1 ratio 2.3641 comp 122.80 MB/s hash da416787a9a43510
+C r2 L1 E s5 TOTAL L1 ratio 2.3641 comp 137.36 MB/s hash da416787a9a43510
+C r2 L1 E s5v3 TOTAL L1 ratio 2.3641 comp 138.38 MB/s hash da416787a9a43510
+C r2 L1 E fast TOTAL L1 ratio 2.3641 comp 133.45 MB/s hash da416787a9a43510
+C r2 L1 E pc TOTAL L1 ratio 2.3641 comp 137.42 MB/s hash da416787a9a43510
+C r2 L1 E lm2 TOTAL L1 ratio 2.3641 comp 134.75 MB/s hash da416787a9a43510
+C r2 L1 E pf TOTAL L1 ratio 2.3641 comp 131.44 MB/s hash da416787a9a43510
+C r2 L1 E dh TOTAL L1 ratio 2.3641 comp 138.48 MB/s hash da416787a9a43510
+C r2 L1 E pc1 TOTAL L1 ratio 2.3641 comp 137.98 MB/s hash da416787a9a43510
+C r2 L6 S s0 TOTAL L6 ratio 3.1067 comp 31.94 MB/s hash 834d090df99d0211
+C r2 L6 S s1 TOTAL L6 ratio 3.1067 comp 31.88 MB/s hash 834d090df99d0211
+C r2 L6 S s2 TOTAL L6 ratio 3.1067 comp 32.03 MB/s hash 834d090df99d0211
+C r2 L6 S s3 TOTAL L6 ratio 3.1067 comp 34.30 MB/s hash 834d090df99d0211
+C r2 L6 S s4 TOTAL L6 ratio 3.1067 comp 35.00 MB/s hash 834d090df99d0211
+C r2 L6 S s5 TOTAL L6 ratio 3.1067 comp 35.93 MB/s hash 834d090df99d0211
+C r2 L6 S s5v3 TOTAL L6 ratio 3.1067 comp 36.09 MB/s hash 834d090df99d0211
+C r2 L6 S fast TOTAL L6 ratio 3.1067 comp 34.31 MB/s hash 834d090df99d0211
+C r2 L6 S pc TOTAL L6 ratio 3.1067 comp 35.98 MB/s hash 834d090df99d0211
+C r2 L6 S lm2 TOTAL L6 ratio 3.1067 comp 35.24 MB/s hash 834d090df99d0211
+C r2 L6 S pf TOTAL L6 ratio 3.1067 comp 33.62 MB/s hash 834d090df99d0211
+C r2 L6 S dh TOTAL L6 ratio 3.1067 comp 35.85 MB/s hash 834d090df99d0211
+C r2 L6 S pc1 TOTAL L6 ratio 3.1067 comp 35.63 MB/s hash 834d090df99d0211
+C r2 L6 CC s0 TOTAL L6 ratio 3.3672 comp 26.72 MB/s hash 7f53727cd0eeb91d
+C r2 L6 CC s1 TOTAL L6 ratio 3.3672 comp 26.69 MB/s hash 7f53727cd0eeb91d
+C r2 L6 CC s2 TOTAL L6 ratio 3.3672 comp 26.78 MB/s hash 7f53727cd0eeb91d
+C r2 L6 CC s3 TOTAL L6 ratio 3.3672 comp 28.83 MB/s hash 7f53727cd0eeb91d
+C r2 L6 CC s4 TOTAL L6 ratio 3.3672 comp 29.34 MB/s hash 7f53727cd0eeb91d
+C r2 L6 CC s5 TOTAL L6 ratio 3.3672 comp 29.83 MB/s hash 7f53727cd0eeb91d
+C r2 L6 CC s5v3 TOTAL L6 ratio 3.3672 comp 29.98 MB/s hash 7f53727cd0eeb91d
+C r2 L6 CC fast TOTAL L6 ratio 3.3672 comp 28.50 MB/s hash 7f53727cd0eeb91d
+C r2 L6 CC pc TOTAL L6 ratio 3.3672 comp 29.80 MB/s hash 7f53727cd0eeb91d
+C r2 L6 CC lm2 TOTAL L6 ratio 3.3672 comp 29.13 MB/s hash 7f53727cd0eeb91d
+C r2 L6 CC pf TOTAL L6 ratio 3.3672 comp 27.77 MB/s hash 7f53727cd0eeb91d
+C r2 L6 CC dh TOTAL L6 ratio 3.3672 comp 29.80 MB/s hash 7f53727cd0eeb91d
+C r2 L6 CC pc1 TOTAL L6 ratio 3.3672 comp 29.56 MB/s hash 7f53727cd0eeb91d
+C r2 L6 E s0 TOTAL L6 ratio 2.7361 comp 24.34 MB/s hash ddb1c54c4c6e39ba
+C r2 L6 E s1 TOTAL L6 ratio 2.7361 comp 24.35 MB/s hash ddb1c54c4c6e39ba
+C r2 L6 E s2 TOTAL L6 ratio 2.7361 comp 24.40 MB/s hash ddb1c54c4c6e39ba
+C r2 L6 E s3 TOTAL L6 ratio 2.7361 comp 26.22 MB/s hash ddb1c54c4c6e39ba
+C r2 L6 E s4 TOTAL L6 ratio 2.7361 comp 26.65 MB/s hash ddb1c54c4c6e39ba
+C r2 L6 E s5 TOTAL L6 ratio 2.7361 comp 27.21 MB/s hash ddb1c54c4c6e39ba
+C r2 L6 E s5v3 TOTAL L6 ratio 2.7361 comp 27.18 MB/s hash ddb1c54c4c6e39ba
+C r2 L6 E fast TOTAL L6 ratio 2.7361 comp 26.08 MB/s hash ddb1c54c4c6e39ba
+C r2 L6 E pc TOTAL L6 ratio 2.7361 comp 27.17 MB/s hash ddb1c54c4c6e39ba
+C r2 L6 E lm2 TOTAL L6 ratio 2.7361 comp 26.81 MB/s hash ddb1c54c4c6e39ba
+C r2 L6 E pf TOTAL L6 ratio 2.7361 comp 25.63 MB/s hash ddb1c54c4c6e39ba
+C r2 L6 E dh TOTAL L6 ratio 2.7361 comp 27.18 MB/s hash ddb1c54c4c6e39ba
+C r2 L6 E pc1 TOTAL L6 ratio 2.7361 comp 26.89 MB/s hash ddb1c54c4c6e39ba
+C r2 L9 S s0 TOTAL L9 ratio 3.1332 comp 13.05 MB/s hash 3afae7e3f5ed15d8
+C r2 L9 S s1 TOTAL L9 ratio 3.1332 comp 13.04 MB/s hash 3afae7e3f5ed15d8
+C r2 L9 S s2 TOTAL L9 ratio 3.1332 comp 12.66 MB/s hash 3afae7e3f5ed15d8
+C r2 L9 S s3 TOTAL L9 ratio 3.1332 comp 13.92 MB/s hash 3afae7e3f5ed15d8
+C r2 L9 S s4 TOTAL L9 ratio 3.1332 comp 14.02 MB/s hash 3afae7e3f5ed15d8
+C r2 L9 S s5 TOTAL L9 ratio 3.1332 comp 14.16 MB/s hash 3afae7e3f5ed15d8
+C r2 L9 S s5v3 TOTAL L9 ratio 3.1332 comp 14.19 MB/s hash 3afae7e3f5ed15d8
+C r2 L9 S fast TOTAL L9 ratio 3.1332 comp 13.62 MB/s hash 3afae7e3f5ed15d8
+C r2 L9 S pc TOTAL L9 ratio 3.1332 comp 14.17 MB/s hash 3afae7e3f5ed15d8
+C r2 L9 S lm2 TOTAL L9 ratio 3.1332 comp 13.21 MB/s hash 3afae7e3f5ed15d8
+C r2 L9 S pf TOTAL L9 ratio 3.1332 comp 13.10 MB/s hash 3afae7e3f5ed15d8
+C r2 L9 S dh TOTAL L9 ratio 3.1332 comp 14.16 MB/s hash 3afae7e3f5ed15d8
+C r2 L9 S pc1 TOTAL L9 ratio 3.1332 comp 13.69 MB/s hash 3afae7e3f5ed15d8
+C r2 L9 CC s0 TOTAL L9 ratio 3.3864 comp 8.27 MB/s hash dffbf62f18289c08
+C r2 L9 CC s1 TOTAL L9 ratio 3.3864 comp 8.26 MB/s hash dffbf62f18289c08
+C r2 L9 CC s2 TOTAL L9 ratio 3.3864 comp 8.28 MB/s hash dffbf62f18289c08
+C r2 L9 CC s3 TOTAL L9 ratio 3.3864 comp 8.53 MB/s hash dffbf62f18289c08
+C r2 L9 CC s4 TOTAL L9 ratio 3.3864 comp 8.57 MB/s hash dffbf62f18289c08
+C r2 L9 CC s5 TOTAL L9 ratio 3.3864 comp 8.61 MB/s hash dffbf62f18289c08
+C r2 L9 CC s5v3 TOTAL L9 ratio 3.3864 comp 8.62 MB/s hash dffbf62f18289c08
+C r2 L9 CC fast TOTAL L9 ratio 3.3864 comp 8.45 MB/s hash dffbf62f18289c08
+C r2 L9 CC pc TOTAL L9 ratio 3.3864 comp 8.61 MB/s hash dffbf62f18289c08
+C r2 L9 CC lm2 TOTAL L9 ratio 3.3864 comp 7.73 MB/s hash dffbf62f18289c08
+C r2 L9 CC pf TOTAL L9 ratio 3.3864 comp 7.94 MB/s hash dffbf62f18289c08
+C r2 L9 CC dh TOTAL L9 ratio 3.3864 comp 8.61 MB/s hash dffbf62f18289c08
+C r2 L9 CC pc1 TOTAL L9 ratio 3.3864 comp 8.19 MB/s hash dffbf62f18289c08
+C r2 L9 E s0 TOTAL L9 ratio 2.7415 comp 18.96 MB/s hash a62a4f685d89cf56
+C r2 L9 E s1 TOTAL L9 ratio 2.7415 comp 18.93 MB/s hash a62a4f685d89cf56
+C r2 L9 E s2 TOTAL L9 ratio 2.7415 comp 18.97 MB/s hash a62a4f685d89cf56
+C r2 L9 E s3 TOTAL L9 ratio 2.7415 comp 20.14 MB/s hash a62a4f685d89cf56
+C r2 L9 E s4 TOTAL L9 ratio 2.7415 comp 20.45 MB/s hash a62a4f685d89cf56
+C r2 L9 E s5 TOTAL L9 ratio 2.7415 comp 20.73 MB/s hash a62a4f685d89cf56
+C r2 L9 E s5v3 TOTAL L9 ratio 2.7415 comp 20.81 MB/s hash a62a4f685d89cf56
+C r2 L9 E fast TOTAL L9 ratio 2.7415 comp 19.99 MB/s hash a62a4f685d89cf56
+C r2 L9 E pc TOTAL L9 ratio 2.7415 comp 20.71 MB/s hash a62a4f685d89cf56
+C r2 L9 E lm2 TOTAL L9 ratio 2.7415 comp 20.58 MB/s hash a62a4f685d89cf56
+C r2 L9 E pf TOTAL L9 ratio 2.7415 comp 19.72 MB/s hash a62a4f685d89cf56
+C r2 L9 E dh TOTAL L9 ratio 2.7415 comp 20.73 MB/s hash a62a4f685d89cf56
+C r2 L9 E pc1 TOTAL L9 ratio 2.7415 comp 20.48 MB/s hash a62a4f685d89cf56
+D r2 L1 S s0 m0 411.4
+D r2 L1 S s0 m1 384.3
+D r2 L1 S s1 m0 646.5
+D r2 L1 S s1 m1 566.8
+D r2 L1 S s2 m0 681.0
+D r2 L1 S s2 m1 593.0
+D r2 L1 S s5 m0 681.1
+D r2 L1 S s5 m1 591.8
+D r2 L1 S s5v3 m0 698.4
+D r2 L1 S s5v3 m1 612.0
+D r2 L1 S pc m0 681.0
+D r2 L1 S pc m1 592.7
+D r2 L1 S ov m0 674.9
+D r2 L1 S ov m1 588.1
+D r2 L1 CC s0 m0 446.7
+D r2 L1 CC s0 m1 418.9
+D r2 L1 CC s1 m0 723.4
+D r2 L1 CC s1 m1 629.1
+D r2 L1 CC s2 m0 765.6
+D r2 L1 CC s2 m1 657.1
+D r2 L1 CC s5 m0 765.8
+D r2 L1 CC s5 m1 659.2
+D r2 L1 CC s5v3 m0 809.6
+D r2 L1 CC s5v3 m1 689.0
+D r2 L1 CC pc m0 764.6
+D r2 L1 CC pc m1 659.7
+D r2 L1 CC ov m0 763.9
+D r2 L1 CC ov m1 654.9
+D r2 L1 E s0 m0 342.7
+D r2 L1 E s0 m1 317.7
+D r2 L1 E s1 m0 576.6
+D r2 L1 E s1 m1 478.0
+D r2 L1 E s2 m0 601.2
+D r2 L1 E s2 m1 496.3
+D r2 L1 E s5 m0 603.6
+D r2 L1 E s5 m1 496.1
+D r2 L1 E s5v3 m0 618.9
+D r2 L1 E s5v3 m1 512.5
+D r2 L1 E pc m0 602.9
+D r2 L1 E pc m1 497.6
+D r2 L1 E ov m0 601.2
+D r2 L1 E ov m1 493.6
+D r2 L6 S s0 m0 437.7
+D r2 L6 S s0 m1 408.7
+D r2 L6 S s1 m0 697.7
+D r2 L6 S s1 m1 617.4
+D r2 L6 S s2 m0 738.6
+D r2 L6 S s2 m1 648.8
+D r2 L6 S s5 m0 738.5
+D r2 L6 S s5 m1 648.4
+D r2 L6 S s5v3 m0 756.8
+D r2 L6 S s5v3 m1 669.0
+D r2 L6 S pc m0 738.3
+D r2 L6 S pc m1 649.2
+D r2 L6 S ov m0 731.1
+D r2 L6 S ov m1 643.8
+D r2 L6 CC s0 m0 468.1
+D r2 L6 CC s0 m1 436.6
+D r2 L6 CC s1 m0 816.9
+D r2 L6 CC s1 m1 704.6
+D r2 L6 CC s2 m0 872.5
+D r2 L6 CC s2 m1 756.6
+D r2 L6 CC s5 m0 872.2
+D r2 L6 CC s5 m1 754.1
+D r2 L6 CC s5v3 m0 910.1
+D r2 L6 CC s5v3 m1 786.6
+D r2 L6 CC pc m0 873.7
+D r2 L6 CC pc m1 750.9
+D r2 L6 CC ov m0 865.0
+D r2 L6 CC ov m1 748.5
+D r2 L6 E s0 m0 349.3
+D r2 L6 E s0 m1 324.8
+D r2 L6 E s1 m0 592.0
+D r2 L6 E s1 m1 507.0
+D r2 L6 E s2 m0 620.7
+D r2 L6 E s2 m1 527.7
+D r2 L6 E s5 m0 620.6
+D r2 L6 E s5 m1 525.6
+D r2 L6 E s5v3 m0 637.1
+D r2 L6 E s5v3 m1 547.4
+D r2 L6 E pc m0 620.4
+D r2 L6 E pc m1 528.7
+D r2 L6 E ov m0 616.9
+D r2 L6 E ov m1 521.4
+D r2 L9 S s0 m0 442.0
+D r2 L9 S s0 m1 412.5
+D r2 L9 S s1 m0 703.6
+D r2 L9 S s1 m1 620.1
+D r2 L9 S s2 m0 744.3
+D r2 L9 S s2 m1 652.7
+D r2 L9 S s5 m0 744.4
+D r2 L9 S s5 m1 652.0
+D r2 L9 S s5v3 m0 762.7
+D r2 L9 S s5v3 m1 672.0
+D r2 L9 S pc m0 744.2
+D r2 L9 S pc m1 653.2
+D r2 L9 S ov m0 737.2
+D r2 L9 S ov m1 647.2
+D r2 L9 CC s0 m0 474.6
+D r2 L9 CC s0 m1 440.8
+D r2 L9 CC s1 m0 825.0
+D r2 L9 CC s1 m1 719.3
+D r2 L9 CC s2 m0 882.0
+D r2 L9 CC s2 m1 760.3
+D r2 L9 CC s5 m0 882.2
+D r2 L9 CC s5 m1 758.3
+D r2 L9 CC s5v3 m0 921.2
+D r2 L9 CC s5v3 m1 787.5
+D r2 L9 CC pc m0 882.3
+D r2 L9 CC pc m1 759.5
+D r2 L9 CC ov m0 872.9
+D r2 L9 CC ov m1 750.7
+D r2 L9 E s0 m0 350.1
+D r2 L9 E s0 m1 325.3
+D r2 L9 E s1 m0 592.9
+D r2 L9 E s1 m1 506.7
+D r2 L9 E s2 m0 622.0
+D r2 L9 E s2 m1 527.3
+D r2 L9 E s5 m0 621.9
+D r2 L9 E s5 m1 525.7
+D r2 L9 E s5v3 m0 638.3
+D r2 L9 E s5v3 m1 545.8
+D r2 L9 E pc m0 621.5
+D r2 L9 E pc m1 528.6
+D r2 L9 E ov m0 614.3
+D r2 L9 E ov m1 523.4

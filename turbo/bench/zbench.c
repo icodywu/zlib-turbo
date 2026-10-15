@@ -1,7 +1,8 @@
 /* zbench: decompression speed of a zlib-API library (stock or patched zlib, or zlib-ng in compat mode) on zlib streams made by
    zmake (file.z holds the stream; file is the original).
    usage: zbench mode file...   mode 0: one call, whole input and output; mode 1: 16 KiB in / 64 KiB out chunks
-   (as gzip-style tools feed inflate). Per file: best of the decompressions in at least 1 s, output verified once. */
+   (as gzip-style tools feed inflate). Per file: best of the decompressions in at least 1 s, output verified once.
+   With ZGZIP set in the environment, the streams are gzip streams (from zmake with ZGZIP set). */
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -30,7 +31,7 @@ static unsigned char* load(const char* name, size_t* n)
 static long run(int mode, const unsigned char* c, size_t cn, unsigned char* o, size_t on, unsigned char* tmp)
 {
     z_stream s; memset(&s, 0, sizeof s);
-    if (inflateInit(&s) != Z_OK) return -1;
+    if (inflateInit2(&s, getenv("ZGZIP") ? 31 : 15) != Z_OK) return -1;
     long total = 0;
     int r;
     if (mode == 0) {

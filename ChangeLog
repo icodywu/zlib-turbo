@@ -10,6 +10,9 @@ Changes in zlib-turbo 1.0.0, an altered version of zlib 1.3.2 (see NOTICE)
 - Hash tables slid in a form that compilers vectorize
 - Prepared dictionaries: deflatePrepareDictionary(), deflateUseDictionary() and
   deflateFreeDictionary(), and zlibTurboVersion(), in the new header zturbo.h
+- Multithreaded compression at levels 4 to 9 with the same output:
+  deflateSetThreads() in zturbo.h; configure --no-threads, CMake option
+  ZLIB_TURBO_THREADS
 - Compressed output, return values and decompressed results unchanged
 - Tests and benchmarks against zlib in turbo/
 

@@ -13,10 +13,12 @@ in place of zlib in a program, a package or a whole system, and nothing else cha
 | Decompression, enwik8 (level 6 streams) | 349 MB/s | 621 MB/s | **+78%** |
 | Compression, Silesia, level 1 | 114 MB/s | 151 MB/s | **+32%** |
 | Compression, Silesia, level 6 | 31.9 MB/s | 36.0 MB/s | **+13%** |
+| Compression, Silesia, level 6, 16 threads | 31.9 MB/s | 218 MB/s | **6.8×** |
 | Compressed output | | | **identical** |
 
-zlib-turbo also adds one optional feature, prepared dictionaries, which make compressing many small messages with
-a dictionary up to four times as fast (see below). Programs that do not use it see plain zlib.
+zlib-turbo also adds two optional features: multithreaded compression, with output still identical to zlib's, and
+prepared dictionaries, which make compressing many small messages with a dictionary up to four times as fast (see
+below). Programs that do not use them see plain zlib.
 
 ## Why the same bytes matter
 
@@ -67,7 +69,7 @@ different output; at level 1 its files are 18% to 22% larger than zlib's. All ru
 
 ## What changed
 
-Six changes to zlib 1.3.2, each its own commit:
+Seven changes to zlib 1.3.2, each its own commit:
 
 1. **Decompression: a 64-bit bit buffer and wide copies** (`inffast.c`). A new fast loop refills a 64-bit bit
    buffer eight bytes at a time, once per length/distance pair or per up to three literals, and copies matches 16
@@ -80,9 +82,47 @@ Six changes to zlib 1.3.2, each its own commit:
 4. **A 64-bit bit writer** (`trees.c`) for the compressed data of each block.
 5. **Hash tables slid eight entries at a time** (`deflate.c`), so that compilers vectorize it.
 6. **Prepared dictionaries** (`deflate.c`, new header `zturbo.h`), below.
+7. **Multithreaded compression** (`deflate.c`, `trees.c`, `zturbo.h`), below.
+
+How each change works, why the output stays the same, what each one gains, and what was tried and dropped:
+[`turbo/TECHNIQUES.md`](turbo/TECHNIQUES.md).
 
 Everything is portable C89. There is no SIMD code, no assembly and no run-time CPU detection: the same source
-builds wherever zlib builds, and compilers that target newer CPUs simply generate better code from it.
+builds wherever zlib builds, and compilers that target newer CPUs simply generate better code from it. Threads are
+POSIX threads, or Windows' own.
+
+## Multithreaded compression
+
+`deflateSetThreads()` puts worker threads on a stream. At levels 4 to 9 they search for matches ahead of the
+parse and write the finished blocks, and the compressed output is still zlib's, byte for byte, for any number of
+threads, any sizes of input and output per call, flushes, `deflateParams()` and dictionaries:
+
+```c
+#include "zturbo.h"
+
+deflateInit(&strm, 6);
+deflateSetThreads(&strm, 16);   /* 0 or 1: back to one thread */
+/* deflate() as usual */
+```
+
+| Silesia / enwik8, MB/s | 1 thread | 4 threads | 8 threads | 16 threads | 24 threads |
+|---|---:|---:|---:|---:|---:|
+| Level 4 | 85.8 / 70.7 | 214 / 205 | 223 / 212 | 232 / 219 | 211 / 211 |
+| Level 6 | 35.8 / 27.1 | 126 / 103 | 202 / 190 | **218 / 210** | 198 / 206 |
+| Level 9 | 14.1 / 20.7 | 51 / 78 | 92 / 155 | 148 / **223** | **160** / 211 |
+
+Each file compressed whole in one `deflate()` call, worker threads on one socket of a 2 × 32-core AMD EPYC 9334, GCC
+14 -O2, best of two runs. zlib 1.3.2 itself does 31.9 / 24.4 MB/s at level 6 and 13.1 / 18.9 at level 9. With 16
+threads that is 6.8 and 8.6 times zlib at level 6, and 11 to 12 times at level 9. The calling thread still chooses
+every match, in zlib's order, so the speed levels off near 220 MB/s; at level 9 on Silesia the workers are the
+limit. Levels 1 to 3, `Z_HUFFMAN_ONLY` and `Z_RLE` stay on one thread: their matches depend on the matches before
+them, so they cannot be found ahead with the same result.
+
+Two rules come with the threads, both in `zturbo.h`. When `deflate()` returns with input left, the next call must
+be given the same bytes (they may be at another address), since the workers read ahead. The workers write a block
+only when the output space left for that call can take all of it, so give `deflate()` 256 KiB of output space or
+more per call for the speeds above. Each worker takes about 4 MB. All runs:
+[`turbo/results/threads_epyc9334.txt`](turbo/results/threads_epyc9334.txt).
 
 ## Prepared dictionaries
 
@@ -137,12 +177,16 @@ Every test compares zlib-turbo with unmodified zlib 1.3.2, not only with expecte
 | Differential fuzzing | libFuzzer against zlib 1.3.2. Decompression: 36 million runs under AddressSanitizer and 35 million under UndefinedBehaviorSanitizer. Compression, with all flush modes, `deflateParams()`, dictionaries set or prepared, `deflatePrime()` and `deflateReset()`: 5.7 million runs under AddressSanitizer and 2.8 million under UndefinedBehaviorSanitizer. No difference and no report. |
 | Dictionaries | 9,315 combinations of level, window, `memLevel`, strategy and dictionary length per test file: the same results from zlib's `deflateSetDictionary()` and from zlib-turbo's `deflateSetDictionary()` and `deflateUseDictionary()`. |
 | Streaming | With `Z_SYNC_FLUSH`, every byte before a flush point comes out as soon as its compressed bytes are in (43,815 messages). |
+| Threads | Levels 4 to 9, 23 settings each (input and output in pieces down to one byte, sync and full flushes, `deflateParams()` to other levels, strategies and back, raw and zlib dictionaries, input moved and overwritten between calls) on 12 files, with 3 to 16 threads: every output byte and return code the same as with one thread, 1,656 cases per run, with assertions on. Also under ThreadSanitizer (clang and GCC), AddressSanitizer and UndefinedBehaviorSanitizer, on 32-bit x86, and with MSVC and Windows threads. |
 | zlib's own tests | `make test`, also in a `ZLIB_DEBUG` build; zlib's `test/infcover.c` with new cases for the fast loop. |
 
 ## Building and installing
 
 Exactly as zlib: `./configure && make test && make install`, or CMake, or the files in `win32/`. The library has
-zlib's names (`libz.so.1`, `zlib1.dll`) and installs `zturbo.h` next to `zlib.h`.
+zlib's names (`libz.so.1`, `zlib1.dll`) and installs `zturbo.h` next to `zlib.h`. It is built with threads, and so
+linked with `-pthread` where that is needed; `./configure --no-threads` or CMake `-DZLIB_TURBO_THREADS=OFF` builds
+it without, and `deflateSetThreads()` then accepts only one thread. The files in `win32/` build without threads
+unless `-DZ_TURBO_THREADS` is added.
 
 ## Reproducing the results
 
@@ -154,6 +198,7 @@ sh turbo/tests/run_compress.sh zlib-1.3.2 . silesia/      # identical output and
 sh turbo/bench/run_speed.sh zlib-1.3.2 . silesia/ > speed.txt && python3 turbo/bench/summarize.py speed.txt
 sh turbo/tests/run_stress.sh zlib-1.3.2 . inputs/         # damaged streams, under the sanitizers
 sh turbo/tests/run_dict.sh zlib-1.3.2 . silesia/xml      # prepared dictionaries
+sh turbo/tests/run_threads.sh . 8 silesia/*               # threads: the same bytes as one thread
 TIME=3600 sh turbo/tests/fuzz/run_fuzz.sh zlib-1.3.2 . inputs/          # decompression, differential
 TIME=3600 sh turbo/tests/fuzz/run_fuzz_deflate.sh zlib-1.3.2 . inputs/  # compression, differential
 ```
