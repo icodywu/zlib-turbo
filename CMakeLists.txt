@@ -26,6 +26,13 @@ option(ZLIB_INSTALL "Enable installation of zlib" ON)
 option(ZLIB_PREFIX "prefix for all types and library functions, see zconf.h.in"
        OFF)
 mark_as_advanced(ZLIB_PREFIX)
+option(ZLIB_TURBO_THREADS
+       "zlib-turbo: deflateSetThreads() searches on several threads" ON)
+
+if(ZLIB_TURBO_THREADS AND NOT WIN32)
+    set(THREADS_PREFER_PTHREAD_FLAG ON)
+    find_package(Threads REQUIRED)
+endif(ZLIB_TURBO_THREADS AND NOT WIN32)
 
 get_property(IS_MULTI GLOBAL PROPERTY GENERATOR_IS_MULTI_CONFIG)
 
@@ -159,6 +166,9 @@ if(ZLIB_BUILD_SHARED)
         zlib SHARED ${ZLIB_SRCS} ${ZLIB_PUBLIC_HDRS} ${ZLIB_PRIVATE_HDRS}
                     $<$<OR:$<BOOL:${WIN32}>,$<BOOL:${CYGWIN}>>:win32/zlib1.rc>)
     add_library(ZLIB::ZLIB ALIAS zlib)
+    if(ZLIB_TURBO_THREADS AND NOT WIN32)
+        target_link_libraries(zlib PRIVATE Threads::Threads)
+    endif(ZLIB_TURBO_THREADS AND NOT WIN32)
     target_include_directories(
         zlib
         PUBLIC $<BUILD_INTERFACE:${zlib_BINARY_DIR}>
@@ -169,6 +179,7 @@ if(ZLIB_BUILD_SHARED)
         PRIVATE ZLIB_BUILD
                 $<$<BOOL:NOT:${HAVE_FSEEKO}>:NO_FSEEKO>
                 $<$<BOOL:${HAVE___ATTR__VIS_HIDDEN}>:HAVE_HIDDEN>
+                $<$<BOOL:${ZLIB_TURBO_THREADS}>:Z_TURBO_THREADS>
                 $<$<BOOL:${MSVC}>:_CRT_SECURE_NO_DEPRECATE>
                 $<$<BOOL:${MSVC}>:_CRT_NONSTDC_NO_DEPRECATE>
         PUBLIC $<$<BOOL:${HAVE_OFF64_T}>:_LARGEFILE64_SOURCE=1>)
@@ -204,6 +215,9 @@ if(ZLIB_BUILD_STATIC)
     add_library(zlibstatic STATIC ${ZLIB_SRCS} ${ZLIB_PUBLIC_HDRS}
                                   ${ZLIB_PRIVATE_HDRS})
     add_library(ZLIB::ZLIBSTATIC ALIAS zlibstatic)
+    if(ZLIB_TURBO_THREADS AND NOT WIN32)
+        target_link_libraries(zlibstatic PUBLIC Threads::Threads)
+    endif(ZLIB_TURBO_THREADS AND NOT WIN32)
     target_include_directories(
         zlibstatic
         PUBLIC $<BUILD_INTERFACE:${zlib_BINARY_DIR}>
@@ -214,6 +228,7 @@ if(ZLIB_BUILD_STATIC)
         PRIVATE ZLIB_BUILD
                 $<$<BOOL:NOT:${HAVE_FSEEKO}>:NO_FSEEKO>
                 $<$<BOOL:${HAVE___ATTR__VIS_HIDDEN}>:HAVE_HIDDEN>
+                $<$<BOOL:${ZLIB_TURBO_THREADS}>:Z_TURBO_THREADS>
                 $<$<BOOL:${MSVC}>:_CRT_SECURE_NO_DEPRECATE>
                 $<$<BOOL:${MSVC}>:_CRT_NONSTDC_NO_DEPRECATE>
         PUBLIC $<$<BOOL:${HAVE_OFF64_T}>:_LARGEFILE64_SOURCE=1>)

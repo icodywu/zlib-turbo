@@ -11,4 +11,5 @@ License: Zlib
 
 Requires:
 Libs: -L${libdir} -L${sharedlibdir} -lz
+Libs.private: @LIBS_PRIVATE@
 Cflags: -I${includedir}

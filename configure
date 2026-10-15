@@ -96,6 +96,8 @@ undefined=0
 insecure=0
 unknown=0
 enable_crcvx=1
+threads=1
+libs_private=
 old_cc="$CC"
 old_cflags="$CFLAGS"
 OBJC='$(OBJZ) $(OBJG)'
@@ -123,7 +125,7 @@ case "$1" in
       echo '  configure [--const] [--zprefix] [--prefix=PREFIX]  [--eprefix=EXPREFIX]' | tee -a configure.log
       echo '    [--insecure] [--static] [--64] [--libdir=LIBDIR] [--sharedlibdir=LIBDIR]' | tee -a configure.log
       echo '    [--includedir=INCLUDEDIR] [--mandir=MANDIR]' | tee -a configure.log
-      echo '    [--archs="-arch i386 -arch x86_64"] [--disable-crcvx]' | tee -a configure.log
+      echo '    [--archs="-arch i386 -arch x86_64"] [--disable-crcvx] [--no-threads]' | tee -a configure.log
         exit 0 ;;
     -p*=* | --prefix=*) prefix=`echo $1 | sed 's/[^=]*=//'`; shift ;;
     -e*=* | --eprefix=*) exec_prefix=`echo $1 | sed 's/[^=]*=//'`; shift ;;
@@ -158,6 +160,7 @@ case "$1" in
     --undefined) undefined=1; shift ;;
     --insecure) insecure=1; shift ;;
     --disable-crcvx) enable_crcvx=0; shift ;;
+    --no-threads) threads=0; shift ;;
     *) unknown=1; echo "unknown option ignored: $1" | tee -a configure.log; shift;;
     esac
 done
@@ -915,6 +918,35 @@ EOF
   fi
 fi
 
+# zlib-turbo: deflateSetThreads() searches on threads, Windows' own or POSIX threads
+if test $threads -eq 1; then
+  echo >> configure.log
+  cat > $test.c <<EOF
+#ifdef _WIN32
+#include <windows.h>
+int main(void) { SRWLOCK l; InitializeSRWLock(&l); return 0; }
+#else
+#include <pthread.h>
+static void *f(void *a) { return a; }
+int main(void) { pthread_t t; return pthread_create(&t, 0, f, 0) || pthread_join(t, 0); }
+#endif
+EOF
+  if try $CC $CFLAGS -pthread $LDFLAGS -pthread -o $test $test.c; then
+    CFLAGS="$CFLAGS -DZ_TURBO_THREADS -pthread"
+    SFLAGS="$SFLAGS -DZ_TURBO_THREADS -pthread"
+    LDFLAGS="$LDFLAGS -pthread"
+    LDSHARED="$LDSHARED -pthread"
+    libs_private="-pthread"
+    echo "Checking for threads... Yes, with -pthread." | tee -a configure.log
+  elif try $CC $CFLAGS $LDFLAGS -o $test $test.c; then
+    CFLAGS="$CFLAGS -DZ_TURBO_THREADS"
+    SFLAGS="$SFLAGS -DZ_TURBO_THREADS"
+    echo "Checking for threads... Yes." | tee -a configure.log
+  else
+    echo "Checking for threads... No." | tee -a configure.log
+  fi
+fi
+
 # check for ibm s390x build
 HAVE_S390X=0
 cat > $test.c << EOF
@@ -1072,6 +1104,7 @@ sed < ${SRCDIR}zlib.pc.in "
 /^LDFLAGS *=/s#=.*#=$LDFLAGS#
 " | sed -e "
 s/\@VERSION\@/$VER/g;
+s/\@LIBS_PRIVATE\@/$libs_private/g;
 " > zlib.pc
 
 # done

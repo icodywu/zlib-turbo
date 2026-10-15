@@ -1,5 +1,10 @@
 @PACKAGE_INIT@
 
+if("@ZLIB_TURBO_THREADS@" AND NOT WIN32)
+    include(CMakeFindDependencyMacro)
+    find_dependency(Threads)
+endif()
+
 set(_ZLIB_supported_components "shared" "static")
 
 if(ZLIB_FIND_COMPONENTS)
