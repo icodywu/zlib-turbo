@@ -116,6 +116,7 @@ ZLIB_1.3.2 {
 } ZLIB_1.3.1.2;
 
 ZLIB_TURBO_1.0 {
+    zlibTurboVersion;
     deflatePrepareDictionary;
     deflateUseDictionary;
     deflateFreeDictionary;

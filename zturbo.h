@@ -15,6 +15,14 @@ extern "C" {
 #endif
 
 #define ZLIB_TURBO 1
+#define ZLIB_TURBO_VERSION "1.0.0"
+
+ZEXTERN const char * ZEXPORT zlibTurboVersion(void);
+/*
+     Returns ZLIB_TURBO_VERSION of the library: zlibVersion() returns the version
+   of zlib that zlib-turbo is based on, as zlib does, so that programs that check
+   it see no difference. zlibTurboVersion() tells that the library is zlib-turbo.
+*/
 
 /*
      Prepared dictionaries

@@ -6,6 +6,7 @@
 /* @(#) $Id$ */
 
 #include "zutil.h"
+#include "zturbo.h"
 #ifndef Z_SOLO
 #  include "gzguts.h"
 #endif
@@ -26,6 +27,10 @@ z_const char * const z_errmsg[10] = {
 
 const char * ZEXPORT zlibVersion(void) {
     return ZLIB_VERSION;
+}
+
+const char * ZEXPORT zlibTurboVersion(void) {
+    return ZLIB_TURBO_VERSION;
 }
 
 uLong ZEXPORT zlibCompileFlags(void) {

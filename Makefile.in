@@ -402,7 +402,7 @@ tags:
 	etags $(SRCDIR)*.[ch]
 
 adler32.o: $(SRCDIR)zutil.h $(SRCDIR)zlib.h zconf.h
-zutil.o: $(SRCDIR)zutil.h $(SRCDIR)zlib.h zconf.h $(SRCDIR)gzguts.h
+zutil.o: $(SRCDIR)zutil.h $(SRCDIR)zlib.h zconf.h $(SRCDIR)zturbo.h $(SRCDIR)gzguts.h
 gzclose.o gzlib.o gzread.o gzwrite.o: $(SRCDIR)zlib.h zconf.h $(SRCDIR)gzguts.h
 compress.o example.o minigzip.o uncompr.o: $(SRCDIR)zlib.h zconf.h
 crc32.o: $(SRCDIR)zutil.h $(SRCDIR)zlib.h zconf.h $(SRCDIR)crc32.h
@@ -414,7 +414,7 @@ trees.o: $(SRCDIR)deflate.h $(SRCDIR)zutil.h $(SRCDIR)zlib.h zconf.h $(SRCDIR)tr
 crc32_vx.o: $(SRCDIR)zutil.h $(SRCDIR)zlib.h zconf.h $(SRCDIR)contrib/crc32vx/crc32_vx_hooks.h
 
 adler32.lo: $(SRCDIR)zutil.h $(SRCDIR)zlib.h zconf.h
-zutil.lo: $(SRCDIR)zutil.h $(SRCDIR)zlib.h zconf.h $(SRCDIR)gzguts.h
+zutil.lo: $(SRCDIR)zutil.h $(SRCDIR)zlib.h zconf.h $(SRCDIR)zturbo.h $(SRCDIR)gzguts.h
 gzclose.lo gzlib.lo gzread.lo gzwrite.lo: $(SRCDIR)zlib.h zconf.h $(SRCDIR)gzguts.h
 compress.lo example.lo minigzip.lo uncompr.lo: $(SRCDIR)zlib.h zconf.h
 crc32.lo: $(SRCDIR)zutil.h $(SRCDIR)zlib.h zconf.h $(SRCDIR)crc32.h
