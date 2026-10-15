@@ -119,7 +119,7 @@ configure_file(${zlib_BINARY_DIR}/zconf.h.cmakein ${zlib_BINARY_DIR}/zconf.h)
 # zlib
 # ============================================================================
 
-set(ZLIB_PUBLIC_HDRS ${zlib_BINARY_DIR}/zconf.h zlib.h)
+set(ZLIB_PUBLIC_HDRS ${zlib_BINARY_DIR}/zconf.h zlib.h zturbo.h)
 
 set(ZLIB_PRIVATE_HDRS
     crc32.h

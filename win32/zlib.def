@@ -102,3 +102,7 @@ EXPORTS
     inflateResetKeep
     deflateResetKeep
     gzopen_w
+; zlib-turbo additions
+    deflatePrepareDictionary
+    deflateUseDictionary
+    deflateFreeDictionary

@@ -50,6 +50,7 @@
 /* @(#) $Id$ */
 
 #include "deflate.h"
+#include "zturbo.h"
 
 const char deflate_copyright[] =
    " deflate 1.3.2 Copyright 1995-2026 Jean-loup Gailly and Mark Adler ";
@@ -642,6 +643,128 @@ int ZEXPORT deflateGetDictionary(z_streamp strm, Bytef *dictionary,
     if (dictLength != Z_NULL)
         *dictLength = len;
     return Z_OK;
+}
+
+/* ===========================================================================
+ * Prepared dictionaries (zturbo.h). A prepared dictionary holds the state that
+ * deflateSetDictionary() leaves on a stream just initialized or reset: the hash
+ * table, the hash chains of the dictionary's strings, ins_h, and the number of
+ * strings not yet inserted. Copying that state gives what indexing would give.
+ */
+struct z_dict_s {
+    free_func zfree;        /* to free this */
+    voidpf opaque;
+    uInt w_bits;            /* windowBits and hash_bits of the stream */
+    uInt hash_bits;
+    uLong adler;            /* Adler-32 of the whole dictionary */
+    uInt len;               /* length of the whole dictionary */
+    uInt tail;              /* bytes in the window: the last w_size at most */
+    uInt insert;            /* strings not yet inserted at the end */
+    uInt ins_h;             /* hash after the last insertion */
+    Bytef *bytes;           /* the whole dictionary */
+    Posf *head;             /* the hash table, 1 << hash_bits entries */
+    Posf *prev;             /* the chains, tail - insert entries */
+};
+
+/* Whether s is as deflateInit2() or deflateReset() left it, with nothing in
+   its window or hash table. */
+local int fresh_state(deflate_state *s) {
+    return s->status == INIT_STATE && s->strstart == 0 && s->lookahead == 0 &&
+           s->insert == 0 && s->block_start == 0;
+}
+
+/* ========================================================================= */
+int ZEXPORT deflatePrepareDictionary(z_streamp strm, const Bytef *dictionary,
+                                     uInt dictLength, z_dict **dict) {
+    deflate_state *s;
+    z_dict *d;
+    ulg nhead, nprev, size;
+    int ret;
+
+    if (dict == Z_NULL)
+        return Z_STREAM_ERROR;
+    *dict = Z_NULL;
+    if (deflateStateCheck(strm) || dictionary == Z_NULL)
+        return Z_STREAM_ERROR;
+    s = strm->state;
+    if (!fresh_state(s))
+        return Z_STREAM_ERROR;
+    ret = deflateSetDictionary(strm, dictionary, dictLength);
+    if (ret != Z_OK)
+        return ret;
+
+    /* one allocation: the header, the two tables, then the bytes */
+    nhead = s->hash_size;
+    nprev = s->strstart - s->insert;
+    size = sizeof(z_dict) + (nhead + nprev) * sizeof(Pos) + dictLength;
+    if (size < dictLength || size != (uInt)size)
+        return Z_MEM_ERROR;
+    d = (z_dict *)ZALLOC(strm, 1, (uInt)size);
+    if (d == Z_NULL)
+        return Z_MEM_ERROR;
+    d->zfree = strm->zfree;
+    d->opaque = strm->opaque;
+    d->w_bits = s->w_bits;
+    d->hash_bits = s->hash_bits;
+    d->adler = adler32(1L, dictionary, dictLength);
+    d->len = dictLength;
+    d->tail = s->strstart;
+    d->insert = s->insert;
+    d->ins_h = s->ins_h;
+    d->head = (Posf *)(d + 1);
+    d->prev = d->head + nhead;
+    d->bytes = (Bytef *)(d->prev + nprev);
+    zmemcpy(d->head, s->head, (unsigned)(nhead * sizeof(Pos)));
+#ifndef FASTEST
+    zmemcpy(d->prev, s->prev, (unsigned)(nprev * sizeof(Pos)));
+#endif
+    zmemcpy(d->bytes, dictionary, dictLength);
+    *dict = d;
+    return Z_OK;
+}
+
+/* ========================================================================= */
+int ZEXPORT deflateUseDictionary(z_streamp strm, const z_dict *dict) {
+    deflate_state *s;
+    unsigned avail;
+    z_const unsigned char *next;
+
+    if (deflateStateCheck(strm) || dict == Z_NULL)
+        return Z_STREAM_ERROR;
+    s = strm->state;
+    if (s->wrap == 2 || !fresh_state(s) || dict->w_bits != s->w_bits ||
+        dict->hash_bits != s->hash_bits)
+        return deflateSetDictionary(strm, dict->bytes, dict->len);
+
+    /* what deflateSetDictionary() does, with the indexing copied */
+    if (s->wrap == 1)
+        strm->adler = dict->adler;
+    zmemcpy(s->window, dict->bytes + (dict->len - dict->tail), dict->tail);
+    zmemcpy(s->head, dict->head, (unsigned)(s->hash_size * sizeof(Pos)));
+#ifndef FASTEST
+    zmemcpy(s->prev, dict->prev,
+            (unsigned)((dict->tail - dict->insert) * sizeof(Pos)));
+#endif
+    s->ins_h = dict->ins_h;
+    s->strstart = dict->tail;
+    avail = strm->avail_in;             /* fill_window() with no input: */
+    next = strm->next_in;               /* only the zeroing past the end */
+    strm->avail_in = 0;
+    fill_window(s);
+    strm->next_in = next;
+    strm->avail_in = avail;
+    s->block_start = (long)s->strstart;
+    s->insert = dict->insert;
+    s->match_length = s->prev_length = MIN_MATCH-1;
+    s->match_available = 0;
+    strm->total_in += dict->tail;       /* as read_buf() counts it */
+    return Z_OK;
+}
+
+/* ========================================================================= */
+void ZEXPORT deflateFreeDictionary(z_dict *dict) {
+    if (dict != Z_NULL)
+        dict->zfree(dict->opaque, (voidpf)dict);
 }
 
 /* ========================================================================= */

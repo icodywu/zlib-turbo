@@ -114,3 +114,9 @@ ZLIB_1.3.2 {
   local:
     inflate_fixed;
 } ZLIB_1.3.1.2;
+
+ZLIB_TURBO_1.0 {
+    deflatePrepareDictionary;
+    deflateUseDictionary;
+    deflateFreeDictionary;
+} ZLIB_1.3.2;
