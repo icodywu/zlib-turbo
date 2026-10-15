@@ -1,6 +1,18 @@
 
                 ChangeLog file for zlib
 
+Changes in zlib-turbo 1.0.0, an altered version of zlib 1.3.2 (see NOTICE)
+- Faster inflate_fast() with a 64-bit bit buffer and wide match copies
+- Larger first-level decoding tables (10 and 8 bits)
+- Adler-32 eight bytes at a time on 64-bit targets
+- Match candidates in deflate compared two and eight bytes at a time
+- A 64-bit bit writer for the compressed data of a block
+- Hash tables slid in a form that compilers vectorize
+- Prepared dictionaries: deflatePrepareDictionary(), deflateUseDictionary() and
+  deflateFreeDictionary(), and zlibTurboVersion(), in the new header zturbo.h
+- Compressed output, return values and decompressed results unchanged
+- Tests and benchmarks against zlib in turbo/
+
 Changes in 1.3.2 (17 Feb 2026)
 - Continued rewrite of CMake build [Vollstrecker]
 - Various portability improvements
