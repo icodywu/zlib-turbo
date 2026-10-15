@@ -25,6 +25,39 @@ ZEXTERN const char * ZEXPORT zlibTurboVersion(void);
 */
 
 /*
+     Multithreaded compression
+
+     With deflateSetThreads(), deflate() searches for matches on worker threads
+   at levels 4 to 9, while the calling thread chooses the matches as before.
+   The workers also write the blocks, while the calling thread goes on, when
+   the output space left for that call of deflate() can take the whole block:
+   give deflate() 256 KB of output space or more per call for full speed. The
+   compressed output is the same, byte for byte, as with one thread, and so the
+   same as zlib's: for any number of threads, any sizes of input and output per
+   call, flushes, deflateParams() and dictionaries. Levels 1 to 3,
+   Z_HUFFMAN_ONLY and Z_RLE do not use the workers.
+*/
+
+ZEXTERN int ZEXPORT deflateSetThreads(z_streamp strm, int threads);
+/*
+     Starts threads worker threads for strm, after deflateInit() or
+   deflateInit2() and before or between calls of deflate(). 0 or 1 stops them,
+   as deflateEnd() does; deflateReset() keeps them, and deflateCopy() makes a
+   copy that runs without them. Each worker takes about 4 MB.
+
+     The workers read ahead in the input. So when deflate() returns with input
+   left (avail_in not zero), the next call must be given the same bytes that
+   were left, though they may be at another address: once deflate() returns,
+   the workers no longer read next_in.
+
+     Returns Z_OK; Z_STREAM_ERROR if strm is not valid, threads is negative or
+   more than 256, or threads is more than 1 and the library was built without
+   threads (configure --no-threads, or CMake with ZLIB_TURBO_THREADS off); or
+   Z_MEM_ERROR if memory or a thread could not be had, in which case strm
+   continues on one thread.
+*/
+
+/*
      Prepared dictionaries
 
      deflateSetDictionary() indexes its dictionary for every stream: up to 32K

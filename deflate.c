@@ -76,6 +76,12 @@ local block_state deflate_fast(deflate_state *s, int flush);
 #ifndef FASTEST
 local block_state deflate_slow(deflate_state *s, int flush);
 #endif
+#ifdef Z_TURBO_THREADS
+local void mt_reset(deflate_state *s);
+local void mt_free(z_streamp strm, deflate_state *s);
+local void mt_catch_up(deflate_state *s, unsigned end);
+local void mt_restart(deflate_state *s, Z_U8 at, int partial);
+#endif
 local block_state deflate_rle(deflate_state *s, int flush);
 local block_state deflate_huff(deflate_state *s, int flush);
 
@@ -295,7 +301,17 @@ local void fill_window(deflate_state *s) {
             s->block_start -= (long) wsize;
             if (s->insert > s->strstart)
                 s->insert = s->strstart;
-            slide_hash(s);
+#ifdef Z_TURBO_THREADS
+            if (s->mt_lag)
+                s->mt_slides++;     /* done when the parse catches up */
+            else
+#endif
+            {
+                slide_hash(s);
+            }
+#ifdef Z_TURBO_THREADS
+            s->mt_abs += wsize;
+#endif
             more += wsize;
         }
         if (s->strm->avail_in == 0) break;
@@ -317,6 +333,10 @@ local void fill_window(deflate_state *s) {
         s->lookahead += n;
 
         /* Initialize the hash value now that we have some input: */
+#ifdef Z_TURBO_THREADS
+        if (s->insert && s->mt_lag)
+            mt_catch_up(s, s->strstart - s->insert);
+#endif
         if (s->lookahead + s->insert >= MIN_MATCH) {
             uInt str = s->strstart - s->insert;
             s->ins_h = s->window[str];
@@ -584,10 +604,16 @@ int ZEXPORT deflateSetDictionary(z_streamp strm, const Bytef *dictionary,
     /* if dictionary would fill window, just replace the history */
     if (dictLength >= s->w_size) {
         if (wrap == 0) {            /* already empty otherwise */
+#ifdef Z_TURBO_THREADS
+            Z_U8 at = s->mt_abs + s->strstart;
+#endif
             CLEAR_HASH(s);
             s->strstart = 0;
             s->block_start = 0L;
             s->insert = 0;
+#ifdef Z_TURBO_THREADS
+            mt_restart(s, at, 0);   /* the window starts again */
+#endif
         }
         dictionary += dictLength - s->w_size;  /* use the tail */
         dictLength = s->w_size;
@@ -623,6 +649,9 @@ int ZEXPORT deflateSetDictionary(z_streamp strm, const Bytef *dictionary,
     strm->next_in = next;
     strm->avail_in = avail;
     s->wrap = wrap;
+#ifdef Z_TURBO_THREADS
+    mt_reset(s);
+#endif
     return Z_OK;
 }
 
@@ -758,6 +787,9 @@ int ZEXPORT deflateUseDictionary(z_streamp strm, const z_dict *dict) {
     s->match_length = s->prev_length = MIN_MATCH-1;
     s->match_available = 0;
     strm->total_in += dict->tail;       /* as read_buf() counts it */
+#ifdef Z_TURBO_THREADS
+    mt_reset(s);
+#endif
     return Z_OK;
 }
 
@@ -825,6 +857,15 @@ local void lm_init(deflate_state *s) {
     s->match_length = s->prev_length = MIN_MATCH-1;
     s->match_available = 0;
     s->ins_h = 0;
+#ifdef Z_TURBO_THREADS
+    s->mt_abs = 0;
+    s->mt_exact = 1;
+    s->mt_lag = 0;
+    s->mt_slides = 0;
+    s->mt_floor = 1;            /* window[0] is never matched */
+    s->mt_from = 0;
+    mt_reset(s);
+#endif
 }
 
 /* ========================================================================= */
@@ -875,13 +916,17 @@ int ZEXPORT deflatePrime(z_streamp strm, int bits, int value) {
 
     if (deflateStateCheck(strm)) return Z_STREAM_ERROR;
     s = strm->state;
+    /* zlib-turbo: where zlib's symbol buffer starts, also when threads use
+       their own */
 #ifdef LIT_MEM
     if (bits < 0 || bits > 16 ||
-        (uchf *)s->d_buf < s->pending_out + ((Buf_size + 7) >> 3))
+        s->pending_buf + (s->lit_bufsize << 1) <
+            s->pending_out + ((Buf_size + 7) >> 3))
         return Z_BUF_ERROR;
 #else
     if (bits < 0 || bits > 16 ||
-        s->sym_buf < s->pending_out + ((Buf_size + 7) >> 3))
+        s->pending_buf + s->lit_bufsize <
+            s->pending_out + ((Buf_size + 7) >> 3))
         return Z_BUF_ERROR;
 #endif
     do {
@@ -901,6 +946,9 @@ int ZEXPORT deflatePrime(z_streamp strm, int bits, int value) {
 int ZEXPORT deflateParams(z_streamp strm, int level, int strategy) {
     deflate_state *s;
     compress_func func;
+#if defined(Z_TURBO_THREADS) && !defined(FASTEST)
+    int full;
+#endif
 
     if (deflateStateCheck(strm)) return Z_STREAM_ERROR;
     s = strm->state;
@@ -914,6 +962,11 @@ int ZEXPORT deflateParams(z_streamp strm, int level, int strategy) {
         return Z_STREAM_ERROR;
     }
     func = configuration_table[s->level].func;
+#if defined(Z_TURBO_THREADS) && !defined(FASTEST)
+    /* whether the stream so far inserted every position in the hash chains */
+    full = s->level != 0 && func == deflate_slow &&
+           s->strategy != Z_HUFFMAN_ONLY && s->strategy != Z_RLE;
+#endif
 
     if ((strategy != s->strategy || func != configuration_table[level].func) &&
         s->last_flush != -2) {
@@ -939,6 +992,10 @@ int ZEXPORT deflateParams(z_streamp strm, int level, int strategy) {
         s->max_chain_length = configuration_table[level].max_chain;
     }
     s->strategy = strategy;
+#if defined(Z_TURBO_THREADS) && !defined(FASTEST)
+    if (!full && s->last_flush != -2)
+        mt_restart(s, s->mt_abs + s->strstart, 1);
+#endif
     return Z_OK;
 }
 
@@ -1371,12 +1428,18 @@ int ZEXPORT deflate(z_streamp strm, int flush) {
                  * as a special marker by inflate_sync().
                  */
                 if (flush == Z_FULL_FLUSH) {
+#ifdef Z_TURBO_THREADS
+                    Z_U8 at = s->mt_abs + s->strstart;
+#endif
                     CLEAR_HASH(s);             /* forget history */
                     if (s->lookahead == 0) {
                         s->strstart = 0;
                         s->block_start = 0L;
                         s->insert = 0;
                     }
+#ifdef Z_TURBO_THREADS
+                    mt_restart(s, at, 0);      /* history starts here */
+#endif
                 }
             }
             flush_pending(strm);
@@ -1425,6 +1488,9 @@ int ZEXPORT deflateEnd(z_streamp strm) {
     status = strm->state->status;
 
     /* Deallocate in reverse order of allocations: */
+#ifdef Z_TURBO_THREADS
+    mt_free(strm, strm->state);
+#endif
     TRY_FREE(strm, strm->state->pending_buf);
     TRY_FREE(strm, strm->state->head);
     TRY_FREE(strm, strm->state->prev);
@@ -1465,6 +1531,9 @@ int ZEXPORT deflateCopy(z_streamp dest, z_streamp source) {
     dest->state = (struct internal_state FAR *) ds;
     zmemcpy(ds, ss, sizeof(deflate_state));
     ds->strm = dest;
+#ifdef Z_TURBO_THREADS
+    ds->mt = Z_NULL;
+#endif
 
     ds->window = (Bytef *) ZALLOC(dest, ds->w_size, 2*sizeof(Byte));
     ds->prev   = (Posf *)  ZALLOC(dest, ds->w_size, sizeof(Pos));
@@ -1868,6 +1937,9 @@ local block_state deflate_stored(deflate_state *s, int flush) {
     int last = 0;
     unsigned len, left, have;
     unsigned used = s->strm->avail_in;
+#ifdef Z_TURBO_THREADS
+    s->mt_exact = 0;            /* this moves the window its own way */
+#endif
     do {
         /* Set len to the maximum size block that we can copy directly with the
          * available input data and output space. Set left to how much of that
@@ -2138,13 +2210,874 @@ local block_state deflate_fast(deflate_state *s, int flush) {
 
 #ifndef FASTEST
 /* ===========================================================================
+ * zlib-turbo: parallel match search for deflate_slow() (levels 4 to 9), with
+ * the same output as one thread. Built with -DZ_TURBO_THREADS (POSIX threads)
+ * and enabled per stream with deflateSetThreads() in zturbo.h.
+ *
+ * Why the output can be the same: deflate_slow() inserts every position into
+ * the hash chains, so the chain at a position holds all earlier positions
+ * with the same hash, whatever matches were chosen before. longest_match()
+ * then depends on the window and on two things the parse decides: prev_length,
+ * which only filters out matches that are not longer, and whether prev_length
+ * reached good_match, which cuts the chain to a quarter. So the longest match
+ * at a position over the whole chain, or over its first quarter, is a fact of
+ * the input, and a worker can find it ahead of the parse.
+ *
+ * To search the positions the parse will search, and with the chain length it
+ * will use, each worker runs deflate_slow()'s parse over its chunk of input,
+ * starting a little before it. The parse resynchronizes quickly, after which
+ * the worker searches exactly what the real parse will ask for. The real parse,
+ * unchanged, then takes each result whose chain length is the one it needs, and
+ * searches itself when there is none (before resynchronization, and at
+ * positions whose search could see the end of the available input).
+ *
+ * Positions are absolute: s->mt_abs is the stream position of window[0]. Each
+ * chunk has its own copy of the bytes it needs (MAX_DIST and the warm-up before
+ * it, MAX_MATCH after it) and its own hash chains, built from them. A chain cut
+ * at the start of the copy only drops positions too far back to be matched.
+ */
+#ifdef Z_TURBO_THREADS
+
+/* Threads: Windows' own (Vista or later), or POSIX threads elsewhere. */
+local void *mt_worker(void *arg);
+#ifdef _WIN32
+#  ifndef WIN32_LEAN_AND_MEAN
+#    define WIN32_LEAN_AND_MEAN
+#  endif
+#  if !defined(_WIN32_WINNT) || _WIN32_WINNT < 0x0600
+#    undef _WIN32_WINNT
+#    define _WIN32_WINNT 0x0600
+#  endif
+#  undef Freq                   /* deflate.h's names, used by windows.h */
+#  undef Code
+#  undef Dad
+#  undef Len
+#  include <windows.h>
+#  include <process.h>
+#  define Freq fc.freq
+#  define Code fc.code
+#  define Dad  dl.dad
+#  define Len  dl.len
+typedef SRWLOCK mt_mutex;
+typedef CONDITION_VARIABLE mt_cond;
+typedef HANDLE mt_thread;
+#  define mt_mutex_init(m) InitializeSRWLock(m)
+#  define mt_mutex_destroy(m) ((void)(m))
+#  define mt_lock(m) AcquireSRWLockExclusive(m)
+#  define mt_unlock(m) ReleaseSRWLockExclusive(m)
+#  define mt_cond_init(c) InitializeConditionVariable(c)
+#  define mt_cond_destroy(c) ((void)(c))
+#  define mt_wait(c, m) ((void)SleepConditionVariableSRW(c, m, INFINITE, 0))
+#  define mt_signal(c) WakeConditionVariable(c)
+#  define mt_broadcast(c) WakeAllConditionVariable(c)
+local unsigned __stdcall mt_start(void *arg) {
+    mt_worker(arg);
+    return 0;
+}
+/* Start a thread running mt_worker(arg): 0 on success. */
+local int mt_create(mt_thread *t, void *arg) {
+    uintptr_t h = _beginthreadex(NULL, 0, mt_start, arg, 0, NULL);
+    *t = (HANDLE)h;
+    return h == 0;
+}
+local void mt_join(mt_thread t) {
+    WaitForSingleObject(t, INFINITE);
+    CloseHandle(t);
+}
+#else
+#  include <pthread.h>
+typedef pthread_mutex_t mt_mutex;
+typedef pthread_cond_t mt_cond;
+typedef pthread_t mt_thread;
+#  define mt_mutex_init(m) pthread_mutex_init(m, NULL)
+#  define mt_mutex_destroy(m) pthread_mutex_destroy(m)
+#  define mt_lock(m) pthread_mutex_lock(m)
+#  define mt_unlock(m) pthread_mutex_unlock(m)
+#  define mt_cond_init(c) pthread_cond_init(c, NULL)
+#  define mt_cond_destroy(c) pthread_cond_destroy(c)
+#  define mt_wait(c, m) pthread_cond_wait(c, m)
+#  define mt_signal(c) pthread_cond_signal(c)
+#  define mt_broadcast(c) pthread_cond_broadcast(c)
+#  define mt_create(t, arg) pthread_create(t, NULL, mt_worker, arg)
+#  define mt_join(t) pthread_join(t, NULL)
+#endif
+
+#define MT_CHUNK 262144U        /* positions searched per task */
+#define MT_WARM 4096U           /* positions parsed before a chunk to resynchronize */
+#define MT_FREE 0
+#define MT_QUEUED 1
+#define MT_RUNNING 2
+#define MT_DONE 3
+#define MT_COPY_NEED 0          /* a slot's input bytes: not copied yet, */
+#define MT_COPY_BUSY 1          /* being copied, */
+#define MT_COPY_DONE 2          /* or in its data */
+
+/* A search at a position: len is the longest match length (2 if none) plus
+   MT_FULL or MT_PART for the chain length used, or 0 if not searched. */
+#define MT_FULL 0x1000
+#define MT_PART 0x2000
+typedef struct {
+    ush len;
+    ush dist;
+} mt_res;
+
+typedef struct {
+    Z_U8 start;                 /* stream position of the first position */
+    Z_U8 data0;                 /* stream position of data[0] */
+    Z_U8 floor;                 /* the first position the chains can hold */
+    unsigned hist;              /* bytes of data before start */
+    unsigned n;                 /* positions searched */
+    unsigned size;              /* bytes in data */
+    int state;
+    Bytef *data;
+    const Bytef *src;           /* input bytes still to copy into data */
+    unsigned src_at, src_len;   /* where in data, and how many */
+    int copy;                   /* MT_COPY_* state of those bytes */
+    ush *link;                  /* distance back to the previous position with
+                                   the same hash, or 0 for none or too far */
+    mt_res *res;                /* the searches at the n positions */
+} mt_slot;
+
+struct mt_arg_s;
+
+struct mt_engine_s {
+    int threads;
+    unsigned nslots;
+    mt_slot *slot;
+    unsigned first;             /* oldest slot in use */
+    unsigned used;              /* slots in use, from first on */
+    int ready;                  /* the parse has seen slot[first] done */
+    Z_U8 next;                  /* stream position where the next chunk starts */
+    /* the parameters of the parse and search, as when the chunks were made */
+    unsigned max_chain, good, lazy;
+    int nice, strategy;
+    unsigned hash_bits, hash_shift, hash_mask, max_dist;
+    int **headtab;              /* one hash table per worker, and the parse */
+    struct mt_arg_s *args;      /* worker arguments */
+    mt_thread *tid;
+    mt_mutex lock;
+    mt_cond work;
+    mt_cond done;
+    int quit;
+    int started;                /* worker threads running */
+    /* block encoding on a worker, while the parse goes on (mt_flush_block) */
+    deflate_state *es;          /* writes the block in flight */
+    z_stream es_strm;           /* for es->strm->data_type */
+    int enc;                    /* MT_FREE, MT_QUEUED, MT_RUNNING or MT_DONE */
+    int in_flight;              /* enc is not MT_FREE (the parse's copy) */
+    charf *enc_buf;             /* the block's input for a stored block */
+    ulg enc_len;
+    uchf *sym[2];               /* symbol buffers, filled and written in turn */
+    Bytef *snap;                /* copy of the block's input */
+};
+
+/* The longest match at data index i, as longest_match() finds it when no
+   earlier match is to be beaten, from the candidate at q on, among at most
+   count candidates (0: no limit). Returns its length (2 if none) and sets
+   *best to its index. */
+local int mt_longest(struct mt_engine_s *e, mt_slot *sl, unsigned i, int q,
+                     unsigned count, int *best) {
+    Bytef *d = sl->data, *scan = d + i;
+    ush *link = sl->link;
+    unsigned short scan_start = load16(scan);
+    unsigned short scan_end = load16(scan + 1);
+    int len, best_len = MIN_MATCH - 1, nice = e->nice;
+    unsigned seen = 0;
+    Z_U8 p = sl->data0 + i;
+    Z_U8 limit = p > e->max_dist ? p - e->max_dist : 0;
+
+    *best = -1;
+    for (;;) {
+        Bytef *match = d + q;
+        if (load16(match + best_len - 1) == scan_end &&
+            load16(match) == scan_start) {
+            len = 2 + (int)count_match(scan + 2, match + 2);
+            if (len > best_len) {
+                best_len = len;
+                *best = q;
+                if (len >= nice)
+                    break;
+                scan_end = load16(scan + best_len - 1);
+            }
+        }
+        if (++seen == count || link[q] == 0)
+            break;
+        q -= link[q];
+        if (sl->data0 + (unsigned)q <= limit)
+            break;
+    }
+    return best_len;
+}
+
+/* Build the chains of slot sl, run deflate_slow()'s parse over it, and record
+   the searches the parse makes in the chunk. */
+local void mt_search(struct mt_engine_s *e, mt_slot *sl, int *headtab) {
+    Bytef *d = sl->data;
+    ush *link = sl->link;
+    unsigned i, end = sl->hist + sl->n, nhash;
+    unsigned shift = e->hash_shift, mask = e->hash_mask;
+    unsigned full = e->max_chain, part = e->max_chain >> 2;
+    unsigned match_length = MIN_MATCH - 1, match_available = 0;
+    int match_start = 0;
+
+    /* the hash chains of the copy */
+    for (i = 0; i < (1U << e->hash_bits); i++)
+        headtab[i] = -1;
+    nhash = sl->size - (MIN_MATCH - 1);
+    if (nhash > end)
+        nhash = end;
+    i = 0;
+    if (sl->floor > sl->data0) {        /* positions no chain holds */
+        unsigned k = sl->floor - sl->data0 < nhash ?
+                     (unsigned)(sl->floor - sl->data0) : nhash;
+        for (; i < k; i++)
+            link[i] = 0;
+    }
+    for (; i < nhash; i++) {
+        unsigned h = (((unsigned)d[i] << (2 * shift)) ^
+                      ((unsigned)d[i + 1] << shift) ^ d[i + 2]) & mask;
+        int q = headtab[h];
+        link[i] = (ush)(q < 0 || i - (unsigned)q > e->max_dist ? 0 : i - (unsigned)q);
+        headtab[h] = (int)i;
+    }
+    zmemzero(sl->res, sl->n * sizeof(mt_res));
+
+    /* deflate_slow(), searching instead of inserting and tallying */
+    i = sl->hist > MT_WARM ? sl->hist - MT_WARM : 0;
+    while (i < end) {
+        int q = link[i] ? (int)(i - link[i]) : -1;
+        unsigned prev_length = match_length;
+
+        match_length = MIN_MATCH - 1;
+        if (q >= 0 && prev_length < e->lazy && i - (unsigned)q <= e->max_dist) {
+            int part_chain = prev_length >= e->good, b;
+            int len = mt_longest(e, sl, i, q, part_chain ? part : full, &b);
+
+            if (i >= sl->hist) {
+                mt_res *r = sl->res + (i - sl->hist);
+                r->len = (ush)(len | (part_chain ? MT_PART : MT_FULL));
+                r->dist = (ush)(len > MIN_MATCH - 1 ? i - (unsigned)b : 0);
+            }
+            if ((unsigned)len > prev_length) {
+                match_length = (unsigned)len;
+                match_start = b;
+            }
+            else
+                match_length = prev_length;
+            if (match_length <= 5 && (e->strategy == Z_FILTERED
+#if TOO_FAR <= 32767
+                || (match_length == MIN_MATCH &&
+                    i - (unsigned)match_start > TOO_FAR)
+#endif
+                ))
+                match_length = MIN_MATCH - 1;
+        }
+        if (prev_length >= MIN_MATCH && match_length <= prev_length) {
+            i += prev_length - 1;       /* past the previous match */
+            match_available = 0;
+            match_length = MIN_MATCH - 1;
+        }
+        else {
+            match_available = 1;
+            i++;
+        }
+    }
+    (void)match_available;
+}
+
+typedef struct mt_arg_s {
+    struct mt_engine_s *e;
+    int k;
+} mt_arg;
+
+local void mt_take_data(struct mt_engine_s *e, mt_slot *sl);
+
+local void *mt_worker(void *arg) {
+    struct mt_engine_s *e = ((mt_arg *)arg)->e;
+    int *headtab = e->headtab[((mt_arg *)arg)->k];
+
+    mt_lock(&e->lock);
+    for (;;) {
+        mt_slot *sl = NULL;
+        unsigned j;
+        if (e->enc == MT_QUEUED) {      /* a block to write: first */
+            e->enc = MT_RUNNING;
+            mt_unlock(&e->lock);
+            _tr_flush_block(e->es, e->enc_buf, e->enc_len, 0);
+            mt_lock(&e->lock);
+            e->enc = MT_DONE;
+            mt_broadcast(&e->done);
+            continue;
+        }
+        for (j = 0; j < e->used; j++) {
+            mt_slot *c = e->slot + (e->first + j) % e->nslots;
+            if (c->state == MT_QUEUED) {
+                sl = c;
+                break;
+            }
+        }
+        if (sl == NULL) {
+            if (e->quit)
+                break;
+            mt_wait(&e->work, &e->lock);
+            continue;
+        }
+        sl->state = MT_RUNNING;
+        mt_take_data(e, sl);
+        mt_unlock(&e->lock);
+        mt_search(e, sl, headtab);
+        mt_lock(&e->lock);
+        sl->state = MT_DONE;
+        mt_broadcast(&e->done);
+    }
+    mt_unlock(&e->lock);
+    return NULL;
+}
+
+/* Wait for the slot to be free of workers, then free it. Called locked. */
+local void mt_release(struct mt_engine_s *e, mt_slot *sl) {
+    while (sl->state == MT_RUNNING)
+        mt_wait(&e->done, &e->lock);
+    sl->state = MT_FREE;
+}
+
+/* Drop all chunks, and start again at the current position. */
+local void mt_reset(deflate_state *s) {
+    struct mt_engine_s *e = s->mt;
+    unsigned j;
+
+    if (e == Z_NULL)
+        return;
+    mt_lock(&e->lock);
+    for (j = 0; j < e->used; j++)
+        mt_release(e, e->slot + (e->first + j) % e->nslots);
+    e->first = e->used = 0;
+    e->ready = 0;
+    e->next = s->mt_abs + s->strstart;
+    if (e->next < s->mt_from)
+        e->next = s->mt_from;
+    e->max_chain = s->max_chain_length;
+    e->good = s->good_match;
+    e->lazy = s->max_lazy_match;
+    e->nice = s->nice_match;
+    e->strategy = s->strategy;
+    mt_unlock(&e->lock);
+}
+
+/* Set up slot sl's data, the bytes at stream positions [from, from + size):
+   copy those in the window now, as the parse moves the window, and leave the
+   rest, in the input not yet read into it, for the thread that searches the
+   slot to copy. */
+local void mt_copy(deflate_state *s, mt_slot *sl, Z_U8 from) {
+    Z_U8 wend = s->mt_abs + s->strstart + s->lookahead;
+    unsigned k = 0;
+
+    if (from < wend) {
+        k = (unsigned)(wend - from < sl->size ? wend - from : sl->size);
+        zmemcpy(sl->data, s->window + (unsigned)(from - s->mt_abs), k);
+    }
+    sl->src_at = k;
+    sl->src_len = sl->size - k;
+    sl->src = sl->src_len ? s->strm->next_in + (unsigned)(from + k - wend) :
+                            Z_NULL;
+    sl->copy = sl->src_len ? MT_COPY_NEED : MT_COPY_DONE;
+}
+
+/* Make sure slot sl has its input bytes, copying them unless another thread
+   is. Called and returns locked. */
+local void mt_take_data(struct mt_engine_s *e, mt_slot *sl) {
+    while (sl->copy != MT_COPY_DONE) {
+        if (sl->copy == MT_COPY_NEED) {
+            sl->copy = MT_COPY_BUSY;
+            mt_unlock(&e->lock);
+            zmemcpy(sl->data + sl->src_at, sl->src, sl->src_len);
+            mt_lock(&e->lock);
+            sl->copy = MT_COPY_DONE;
+            mt_broadcast(&e->done);
+        }
+        else
+            mt_wait(&e->done, &e->lock);
+    }
+}
+
+/* Before deflate() returns, give every queued chunk its input bytes: the
+   application may reuse its input buffer after that. */
+local void mt_settle(deflate_state *s) {
+    struct mt_engine_s *e = s->mt;
+    unsigned j;
+
+    mt_lock(&e->lock);
+    for (j = 0; j < e->used; j++)
+        mt_take_data(e, e->slot + (e->first + j) % e->nslots);
+    mt_unlock(&e->lock);
+}
+
+/* Queue chunks while there are free slots and input for them. */
+local void mt_fill(deflate_state *s) {
+    struct mt_engine_s *e = s->mt;
+    Z_U8 avail = s->mt_abs + s->strstart + s->lookahead + s->strm->avail_in;
+
+    /* positions with MIN_LOOKAHEAD bytes after them in the input, at least
+       4096 of them */
+    while (e->used < e->nslots && avail >= e->next + MIN_LOOKAHEAD + 4096) {
+        mt_slot *sl = e->slot + (e->first + e->used) % e->nslots;
+        Z_U8 start = e->next, lo;
+        unsigned n, back = e->max_dist + 8 + MT_WARM;
+
+        n = avail - MIN_LOOKAHEAD - start < MT_CHUNK ?
+            (unsigned)(avail - MIN_LOOKAHEAD - start) : MT_CHUNK;
+        lo = start > back ? start - back : 0;
+        if (lo < s->mt_abs)
+            lo = s->mt_abs;
+        /* the slot is not seen by the workers until used counts it */
+        sl->start = start;
+        sl->data0 = lo;
+        sl->floor = s->mt_floor;
+        sl->hist = (unsigned)(start - lo);
+        sl->n = n;
+        sl->size = sl->hist + n + MAX_MATCH;
+        mt_copy(s, sl, lo);
+        mt_lock(&e->lock);
+        sl->state = MT_QUEUED;
+        e->used++;
+        mt_signal(&e->work);
+        mt_unlock(&e->lock);
+        e->next = start + n;
+    }
+}
+
+/* Insert the positions skipped since s->mt_ins into the hash chains, up to
+   window position end (exclusive), as deflate_slow() would have, and stop
+   lagging. Positions more than MAX_DIST before end are left out: no search
+   from end on can reach them, and a chain that ends early there ends where
+   zlib's would stop. */
+local void mt_catch_up(deflate_state *s, unsigned end) {
+    unsigned from = s->mt_ins > s->mt_abs ? (unsigned)(s->mt_ins - s->mt_abs) : 0;
+    unsigned str, stop = s->strstart + s->lookahead;
+    uInt h = 0;
+
+    /* the slides skipped: their order with the insertions skipped does not
+       matter, as a slide leaves positions inserted after it unchanged. Two or
+       more slides empty the tables of everything before the lag. */
+    if (s->mt_slides == 1)
+        slide_hash(s);
+    else if (s->mt_slides > 1) {
+        CLEAR_HASH(s);
+        s->slid = 1;
+    }
+    s->mt_slides = 0;
+    if (end > MAX_DIST(s) + 1 && from < end - MAX_DIST(s) - 1)
+        from = end - MAX_DIST(s) - 1;
+    if (stop >= MIN_MATCH - 1)
+        stop -= MIN_MATCH - 1;          /* positions with three bytes */
+    else
+        stop = 0;
+    if (stop > end)
+        stop = end;
+    for (str = from; str < stop; str++) {
+        h = (((uInt)s->window[str] << (2 * s->hash_shift)) ^
+             ((uInt)s->window[str + 1] << s->hash_shift) ^
+             s->window[str + 2]) & s->hash_mask;
+        s->prev[str & s->w_mask] = s->head[h];
+        s->head[h] = (Pos)str;
+    }
+    if (end >= 1 && end + 1 < s->strstart + s->lookahead)
+        s->ins_h = (((uInt)s->window[end - 1] << (2 * s->hash_shift)) ^
+                    ((uInt)s->window[end] << s->hash_shift) ^
+                    s->window[end + 1]) & s->hash_mask;
+    (void)h;
+    s->mt_ins = s->mt_abs + end;
+    s->mt_lag = 0;
+}
+
+/* The hash chains start again at stream position at, whose window index is
+   now strstart: with no history before it (a full flush, or a dictionary that
+   replaced the window), or, if partial, with only some of the positions
+   before it (after another compression function or strategy). The window
+   positions are counted from here, whatever moved the window before, and the
+   chunks start again. */
+local void mt_restart(deflate_state *s, Z_U8 at, int partial) {
+    s->mt_abs = at - s->strstart;
+    s->mt_exact = 1;
+    s->mt_lag = 0;
+    s->mt_slides = 0;
+    if (partial) {
+        s->mt_floor = s->mt_abs + 1;
+        s->mt_from = at + MAX_DIST(s) + 1;
+    }
+    else {
+        s->mt_floor = at > s->mt_abs ? at : s->mt_abs + 1;
+        s->mt_from = 0;
+    }
+    mt_reset(s);
+}
+
+/* The chunk that holds the current position, searched, or Z_NULL if there is
+   none (positions before the chunks or too near the end of the available
+   input). Frees the chunks behind, queues new ones. */
+local mt_slot *mt_slot_at(deflate_state *s) {
+    struct mt_engine_s *e = s->mt;
+    Z_U8 p = s->mt_abs + s->strstart;
+    mt_slot *sl;
+
+    if (e->max_chain != s->max_chain_length || e->good != s->good_match ||
+        e->lazy != s->max_lazy_match || e->nice != s->nice_match ||
+        e->strategy != s->strategy)
+        mt_reset(s);            /* deflateTune() or deflateParams() */
+
+    /* free the chunks the parse has passed, and queue more */
+    if (e->used && e->slot[e->first].start + e->slot[e->first].n <= p) {
+        mt_lock(&e->lock);
+        while (e->used &&
+               e->slot[e->first].start + e->slot[e->first].n <= p) {
+            mt_release(e, e->slot + e->first);
+            e->first = (e->first + 1) % e->nslots;
+            e->used--;
+            e->ready = 0;
+        }
+        if (e->used == 0 && e->next < p)
+            e->next = p;
+        mt_unlock(&e->lock);
+    }
+    if (e->used < e->nslots)
+        mt_fill(s);
+    if (e->used == 0 || p < e->slot[e->first].start) {
+        return Z_NULL;
+    }
+    sl = e->slot + e->first;
+    if (!e->ready) {
+        mt_lock(&e->lock);
+        while (sl->state != MT_DONE) {
+            if (sl->state == MT_QUEUED) {   /* search it here */
+                sl->state = MT_RUNNING;
+                mt_take_data(e, sl);
+                mt_unlock(&e->lock);
+                mt_search(e, sl, e->headtab[e->threads]);
+                mt_lock(&e->lock);
+                sl->state = MT_DONE;
+                mt_broadcast(&e->done);
+            }
+            else
+                mt_wait(&e->done, &e->lock);
+        }
+        mt_unlock(&e->lock);
+        e->ready = 1;
+    }
+    return sl;
+}
+
+/* What INSERT_STRING() would give as hash_head for the current position, from
+   the chunk's chains: the previous position with the same hash, or NIL if it
+   is at or before window[0] (slid out or index 0) or too far (the chunk keeps
+   no link longer than MAX_DIST, and deflate_slow() searches no further) */
+local IPos mt_head(deflate_state *s, mt_slot *sl) {
+    Z_U8 p = s->mt_abs + s->strstart;
+    unsigned link = sl->link[sl->hist + (unsigned)(p - sl->start)];
+
+    if (link == 0 || p - link <= s->mt_abs)
+        return NIL;
+    return (IPos)(p - link - s->mt_abs);
+}
+
+/* longest_match() for deflate_slow(), from the workers' search when it is the
+   one needed, or else searched here after bringing the chains up to date */
+local uInt mt_result(deflate_state *s, mt_slot *sl, IPos cur_match) {
+    mt_res r = sl->res[(unsigned)(s->mt_abs + s->strstart - sl->start)];
+
+    if ((r.len & (s->prev_length >= s->good_match ? MT_PART : MT_FULL)) == 0) {
+        IPos h;
+        if (s->mt_lag)
+            mt_catch_up(s, s->strstart);
+        INSERT_STRING(s, s->strstart, h);
+        s->mt_ins = s->mt_abs + s->strstart + 1;
+        Assert(h == cur_match, "mt_head differs from the chains");
+        (void)h;
+        return longest_match(s, cur_match);     /* not searched, or not so */
+    }
+    r.len &= 0x1ff;
+    if (r.len > s->prev_length) {
+        s->match_start = s->strstart - r.dist;
+        return r.len;
+    }
+    return s->prev_length;
+}
+
+/* ===========================================================================
+ * Block encoding while the parse goes on. When a block is full, the parse
+ * hands its symbols and trees to e->es and goes on in the other symbol buffer,
+ * while a worker writes the block with _tr_flush_block(). zlib's own symbol
+ * buffer, which shares pending_buf, is not used meanwhile.
+ *
+ * The output and everything the application can see stay as in zlib: a block
+ * is handed off only if the output space is sure to take all of it, so that
+ * zlib would have gone on parsing too, and the parse takes the block's output
+ * and bits back at the next block or before deflate_slow() returns. The block
+ * written by the worker starts with an empty pending_buf, and gets a copy of
+ * its input in case a stored block is shorter, since the window can slide.
+ */
+
+/* The start of the symbol buffer: the distances first with LIT_MEM. */
+#ifdef LIT_MEM
+#  define MT_SYM(s) ((uchf *)(s)->d_buf)
+#  define MT_SYM_ZLIB(s) ((s)->pending_buf + ((s)->lit_bufsize << 1))
+#else
+#  define MT_SYM(s) ((s)->sym_buf)
+#  define MT_SYM_ZLIB(s) ((s)->pending_buf + (s)->lit_bufsize)
+#endif
+
+/* Use the symbol buffer at sym, of 3 * lit_bufsize bytes. */
+local void mt_sym_at(deflate_state *s, uchf *sym) {
+#ifdef LIT_MEM
+    s->d_buf = (ushf *)sym;
+    s->l_buf = sym + (s->lit_bufsize << 1);
+#else
+    s->sym_buf = sym;
+#endif
+}
+
+/* Move the symbols so far to the buffer at sym, and use it. */
+local void mt_sym_move(deflate_state *s, uchf *sym) {
+#ifdef LIT_MEM
+    zmemcpy(sym, s->d_buf, s->sym_next * sizeof(ush));
+    zmemcpy(sym + (s->lit_bufsize << 1), s->l_buf, s->sym_next);
+#else
+    zmemcpy(sym, s->sym_buf, s->sym_next);
+#endif
+    mt_sym_at(s, sym);
+}
+
+/* Wait for the block in flight, if any, and take its output and bits. */
+local void mt_encoded(deflate_state *s) {
+    struct mt_engine_s *e = s->mt;
+    deflate_state *es = e->es;
+
+    if (!e->in_flight)
+        return;
+    mt_lock(&e->lock);
+    if (e->enc == MT_QUEUED) {          /* no worker free: write it here */
+        e->enc = MT_RUNNING;
+        mt_unlock(&e->lock);
+        _tr_flush_block(es, e->enc_buf, e->enc_len, 0);
+        mt_lock(&e->lock);
+    }
+    else
+        while (e->enc != MT_DONE)
+            mt_wait(&e->done, &e->lock);
+    e->enc = MT_FREE;
+    mt_unlock(&e->lock);
+    e->in_flight = 0;
+    s->pending = es->pending;
+    s->bi_buf = es->bi_buf;
+    s->bi_valid = es->bi_valid;
+    s->bi_used = es->bi_used;
+    s->strm->data_type = es->strm->data_type;
+#ifdef ZLIB_DEBUG
+    s->compressed_len = es->compressed_len;
+    s->bits_sent = es->bits_sent;
+#endif
+    flush_pending(s->strm);
+}
+
+/* FLUSH_BLOCK_ONLY() for deflate_slow() with threads: hand the block off. */
+local void mt_flush_block(deflate_state *s, int last) {
+    struct mt_engine_s *e = s->mt;
+    deflate_state *es = e->es;
+    ulg len = (ulg)((long)s->strstart - s->block_start), bound;
+
+    mt_encoded(s);
+    bound = _tr_block_bound(s);
+    if (last || s->pending != 0 || s->strm->avail_out <= bound) {
+        FLUSH_BLOCK_ONLY(s, last);      /* as zlib: may fill the output */
+        return;
+    }
+    Assert(s->pending_out == s->pending_buf, "pending_out not reset");
+    e->enc_buf = Z_NULL;                /* stored only if not over bound */
+    if (s->block_start >= 0L && len + 4 <= bound) {
+        zmemcpy(e->snap, s->window + (unsigned)s->block_start, (unsigned)len);
+        e->enc_buf = (charf *)e->snap;
+    }
+    e->enc_len = len;
+    es->level = s->level;
+    es->strategy = s->strategy;
+    es->strm->data_type = s->strm->data_type;
+    es->pending_buf = s->pending_buf;
+    es->pending_buf_size = s->pending_buf_size;
+    es->pending = 0;
+    es->lit_bufsize = s->lit_bufsize;
+    es->bi_buf = s->bi_buf;
+    es->bi_valid = s->bi_valid;
+    es->bi_used = s->bi_used;
+#ifdef ZLIB_DEBUG
+    es->compressed_len = s->compressed_len;
+    es->bits_sent = s->bits_sent;
+#endif
+    mt_sym_at(es, MT_SYM(s));
+    _tr_hand_off(s, es);
+    mt_sym_at(s, MT_SYM(s) == e->sym[0] ? e->sym[1] : e->sym[0]);
+    s->block_start = s->strstart;
+    mt_lock(&e->lock);
+    e->enc = MT_QUEUED;
+    mt_signal(&e->work);
+    mt_unlock(&e->lock);
+    e->in_flight = 1;
+}
+
+local void mt_free(z_streamp strm, deflate_state *s) {
+    struct mt_engine_s *e = s->mt;
+    unsigned j;
+    int k;
+
+    if (e == Z_NULL)
+        return;
+    if (e->started)
+        mt_encoded(s);
+    if (e->sym[0] != Z_NULL && MT_SYM(s) != MT_SYM_ZLIB(s))
+        mt_sym_move(s, MT_SYM_ZLIB(s));
+    if (e->started) {
+        mt_lock(&e->lock);
+        e->quit = 1;
+        mt_broadcast(&e->work);
+        mt_unlock(&e->lock);
+        for (k = 0; k < e->threads; k++)
+            mt_join(e->tid[k]);
+        mt_mutex_destroy(&e->lock);
+        mt_cond_destroy(&e->work);
+        mt_cond_destroy(&e->done);
+    }
+    if (e->slot != Z_NULL)
+        for (j = 0; j < e->nslots; j++) {
+            TRY_FREE(strm, e->slot[j].data);
+            TRY_FREE(strm, e->slot[j].link);
+            TRY_FREE(strm, e->slot[j].res);
+        }
+    if (e->headtab != Z_NULL)
+        for (k = 0; k <= e->threads; k++)
+            TRY_FREE(strm, e->headtab[k]);
+    TRY_FREE(strm, e->headtab);
+    TRY_FREE(strm, e->es);
+    TRY_FREE(strm, e->sym[0]);
+    TRY_FREE(strm, e->sym[1]);
+    TRY_FREE(strm, e->snap);
+    TRY_FREE(strm, e->args);
+    TRY_FREE(strm, e->slot);
+    TRY_FREE(strm, e->tid);
+    ZFREE(strm, e);
+    s->mt = Z_NULL;
+}
+
+/* ========================================================================= */
+int ZEXPORT deflateSetThreads(z_streamp strm, int threads) {
+    deflate_state *s;
+    struct mt_engine_s *e;
+    unsigned j, size;
+    int k;
+
+    if (deflateStateCheck(strm) || threads < 0 || threads > 256)
+        return Z_STREAM_ERROR;
+    s = strm->state;
+    mt_free(strm, s);
+    if (threads <= 1)
+        return Z_OK;
+    e = (struct mt_engine_s *)ZALLOC(strm, 1, sizeof(struct mt_engine_s));
+    if (e == Z_NULL)
+        return Z_MEM_ERROR;
+    zmemzero(e, sizeof(struct mt_engine_s));
+    s->mt = e;
+    e->threads = threads;
+    e->nslots = 2 * (unsigned)threads + 2;
+    e->hash_bits = s->hash_bits;
+    e->hash_shift = s->hash_shift;
+    e->hash_mask = s->hash_mask;
+    e->max_dist = MAX_DIST(s);
+    e->slot = (mt_slot *)ZALLOC(strm, e->nslots, sizeof(mt_slot));
+    e->tid = (mt_thread *)ZALLOC(strm, threads, sizeof(mt_thread));
+    e->headtab = (int **)ZALLOC(strm, threads + 1, sizeof(int *));
+    e->args = (mt_arg *)ZALLOC(strm, threads, sizeof(mt_arg));
+    if (e->slot == Z_NULL || e->tid == Z_NULL || e->headtab == Z_NULL ||
+        e->args == Z_NULL) {
+        mt_free(strm, s);
+        return Z_MEM_ERROR;
+    }
+    zmemzero(e->slot, e->nslots * sizeof(mt_slot));
+    zmemzero(e->headtab, (threads + 1) * sizeof(int *));
+    size = e->max_dist + 8 + MT_WARM + MT_CHUNK + MAX_MATCH;
+    for (j = 0; j < e->nslots; j++) {
+        e->slot[j].data = (Bytef *)ZALLOC(strm, size, 1);
+        e->slot[j].link = (ush *)ZALLOC(strm, size, sizeof(ush));
+        e->slot[j].res = (mt_res *)ZALLOC(strm, MT_CHUNK, sizeof(mt_res));
+        if (e->slot[j].data == Z_NULL || e->slot[j].link == Z_NULL ||
+            e->slot[j].res == Z_NULL) {
+            mt_free(strm, s);
+            return Z_MEM_ERROR;
+        }
+    }
+    for (k = 0; k <= threads; k++) {
+        e->headtab[k] = (int *)ZALLOC(strm, 1U << e->hash_bits, sizeof(int));
+        if (e->headtab[k] == Z_NULL) {
+            mt_free(strm, s);
+            return Z_MEM_ERROR;
+        }
+    }
+    e->es = (deflate_state *)ZALLOC(strm, 1, sizeof(deflate_state));
+    e->sym[0] = (uchf *)ZALLOC(strm, s->lit_bufsize, 3);
+    e->sym[1] = (uchf *)ZALLOC(strm, s->lit_bufsize, 3);
+    e->snap = (Bytef *)ZALLOC(strm, s->w_size, 2);
+    if (e->es == Z_NULL || e->sym[0] == Z_NULL || e->sym[1] == Z_NULL ||
+        e->snap == Z_NULL) {
+        mt_free(strm, s);
+        return Z_MEM_ERROR;
+    }
+    zmemzero(e->es, sizeof(deflate_state));
+    e->es->strm = &e->es_strm;
+    _tr_init(e->es);
+    mt_sym_move(s, e->sym[0]);
+    mt_mutex_init(&e->lock);
+    mt_cond_init(&e->work);
+    mt_cond_init(&e->done);
+    e->started = 1;
+    for (k = 0; k < threads; k++) {
+        e->args[k].e = e;
+        e->args[k].k = k;
+        if (mt_create(&e->tid[k], e->args + k) != 0) {
+            e->threads = k;     /* join those started */
+            mt_free(strm, s);
+            return Z_MEM_ERROR;
+        }
+    }
+    mt_reset(s);
+    return Z_OK;
+}
+
+/* deflate_slow()'s block flushes: on a worker with threads */
+#  define SLOW_FLUSH_ONLY(s, last) { \
+    if (s->mt != Z_NULL) \
+        mt_flush_block(s, last); \
+    else \
+        FLUSH_BLOCK_ONLY(s, last); \
+}
+#  define SLOW_FLUSH(s, last) { \
+    SLOW_FLUSH_ONLY(s, last); \
+    if (s->strm->avail_out == 0) return (last) ? finish_started : need_more; \
+}
+#else
+#  define SLOW_FLUSH_ONLY(s, last) FLUSH_BLOCK_ONLY(s, last)
+#  define SLOW_FLUSH(s, last) FLUSH_BLOCK(s, last)
+#endif /* Z_TURBO_THREADS */
+
+/* ===========================================================================
  * Same as above, but achieves better compression. We use a lazy
  * evaluation for matches: a match is finally adopted only if there is
  * no better match at the next window position.
  */
-local block_state deflate_slow(deflate_state *s, int flush) {
+local block_state deflate_slow_run(deflate_state *s, int flush) {
     IPos hash_head;          /* head of hash chain */
     int bflush;              /* set if current block must be flushed */
+#ifdef Z_TURBO_THREADS
+    mt_slot *sl;             /* the workers' chunk at this position */
+    mt_slot *cur = Z_NULL;   /* the chunk last found by mt_slot_at() */
+    Z_U8 cur_end = 0;        /* the stream position after it, 0 if none: the
+                                chunks change only in mt_slot_at() */
+#endif
 
     /* Process the input block. */
     for (;;) {
@@ -2165,9 +3098,33 @@ local block_state deflate_slow(deflate_state *s, int flush) {
          * dictionary, and set hash_head to the head of the hash chain:
          */
         hash_head = NIL;
+#ifdef Z_TURBO_THREADS
+        sl = Z_NULL;
+        if (s->mt != Z_NULL && s->mt_exact && s->lookahead >= MIN_MATCH) {
+            if (s->mt_abs + s->strstart < cur_end)
+                sl = cur;               /* still in the same chunk */
+            else {
+                sl = cur = mt_slot_at(s);
+                cur_end = sl != Z_NULL ? sl->start + sl->n : 0;
+            }
+        }
+        if (sl != Z_NULL) {             /* the chunk's chains, no insertion */
+            if (!s->mt_lag) {
+                s->mt_lag = 1;
+                s->mt_ins = s->mt_abs + s->strstart;
+            }
+            hash_head = mt_head(s, sl);
+        }
+        else {
+            if (s->mt_lag)
+                mt_catch_up(s, s->strstart);
+#endif
         if (s->lookahead >= MIN_MATCH) {
             INSERT_STRING(s, s->strstart, hash_head);
         }
+#ifdef Z_TURBO_THREADS
+        }
+#endif
 
         /* Find the longest match, discarding those <= prev_length.
          */
@@ -2180,7 +3137,12 @@ local block_state deflate_slow(deflate_state *s, int flush) {
              * of window index 0 (in particular we have to avoid a match
              * of the string with itself at the start of the input file).
              */
+#ifdef Z_TURBO_THREADS
+            s->match_length = sl != Z_NULL ? mt_result(s, sl, hash_head) :
+                                             longest_match(s, hash_head);
+#else
             s->match_length = longest_match (s, hash_head);
+#endif
             /* longest_match() sets match_start */
 
             if (s->match_length <= 5 && (s->strategy == Z_FILTERED
@@ -2215,6 +3177,13 @@ local block_state deflate_slow(deflate_state *s, int flush) {
              */
             s->lookahead -= s->prev_length - 1;
             s->prev_length -= 2;
+#ifdef Z_TURBO_THREADS
+            if (s->mt_lag) {            /* no insertion: skip the match */
+                s->strstart += s->prev_length;
+                s->prev_length = 0;
+            }
+            else
+#endif
             do {
                 if (++s->strstart <= max_insert) {
                     INSERT_STRING(s, s->strstart, hash_head);
@@ -2224,7 +3193,7 @@ local block_state deflate_slow(deflate_state *s, int flush) {
             s->match_length = MIN_MATCH-1;
             s->strstart++;
 
-            if (bflush) FLUSH_BLOCK(s, 0);
+            if (bflush) SLOW_FLUSH(s, 0);
 
         } else if (s->match_available) {
             /* If there was no match at the previous position, output a
@@ -2234,7 +3203,7 @@ local block_state deflate_slow(deflate_state *s, int flush) {
             Tracevv((stderr,"%c", s->window[s->strstart - 1]));
             _tr_tally_lit(s, s->window[s->strstart - 1], bflush);
             if (bflush) {
-                FLUSH_BLOCK_ONLY(s, 0);
+                SLOW_FLUSH_ONLY(s, 0);
             }
             s->strstart++;
             s->lookahead--;
@@ -2256,14 +3225,38 @@ local block_state deflate_slow(deflate_state *s, int flush) {
     }
     s->insert = s->strstart < MIN_MATCH-1 ? s->strstart : MIN_MATCH-1;
     if (flush == Z_FINISH) {
-        FLUSH_BLOCK(s, 1);
+        SLOW_FLUSH(s, 1);
         return finish_done;
     }
     if (s->sym_next)
-        FLUSH_BLOCK(s, 0);
+        SLOW_FLUSH(s, 0);
     return block_done;
 }
+
+/* deflate_slow(), leaving the hash chains as zlib does when it returns */
+local block_state deflate_slow(deflate_state *s, int flush) {
+    block_state bs;
+    bs = deflate_slow_run(s, flush);
+#ifdef Z_TURBO_THREADS
+    if (s->mt_lag)
+        mt_catch_up(s, s->strstart - s->insert);
+    if (s->mt != Z_NULL) {
+        mt_encoded(s);
+        mt_settle(s);
+    }
+#endif
+    return bs;
+}
 #endif /* FASTEST */
+
+#ifndef Z_TURBO_THREADS
+/* ========================================================================= */
+int ZEXPORT deflateSetThreads(z_streamp strm, int threads) {
+    if (deflateStateCheck(strm) || threads < 0)
+        return Z_STREAM_ERROR;
+    return threads <= 1 ? Z_OK : Z_STREAM_ERROR;
+}
+#endif
 
 /* ===========================================================================
  * For Z_RLE, simply look for runs of bytes, generate matches only of distance

@@ -1107,6 +1107,41 @@ local int detect_data_type(deflate_state *s) {
  * Determine the best encoding for the current block: dynamic trees, static
  * trees or store, and write out the encoded block.
  */
+#ifdef Z_TURBO_THREADS
+/* ===========================================================================
+ * zlib-turbo: an upper bound on the bytes _tr_flush_block() writes for the
+ * current block. It writes at most the static trees' cost (static_len), plus
+ * the bits already in bi_buf and the last block's alignment.
+ */
+ulg ZLIB_INTERNAL _tr_block_bound(deflate_state *s) {
+    ulg bits = 0;
+    int n;
+
+    for (n = 0; n <= END_BLOCK; n++)
+        bits += (ulg)s->dyn_ltree[n].Freq * static_ltree[n].Len;
+    for (; n < L_CODES; n++)
+        bits += (ulg)s->dyn_ltree[n].Freq *
+                (static_ltree[n].Len + extra_lbits[n - END_BLOCK - 1]);
+    for (n = 0; n < D_CODES; n++)
+        bits += (ulg)s->dyn_dtree[n].Freq * (5 + extra_dbits[n]);
+    return ((bits + 3 + 7) >> 3) + 16;
+}
+
+/* ===========================================================================
+ * zlib-turbo: give the current block's trees and symbols to es, for
+ * _tr_flush_block(es, ...) on another thread, and start a new block in s.
+ */
+void ZLIB_INTERNAL _tr_hand_off(deflate_state *s, deflate_state *es) {
+    zmemcpy(es->dyn_ltree, s->dyn_ltree, sizeof(s->dyn_ltree));
+    zmemcpy(es->dyn_dtree, s->dyn_dtree, sizeof(s->dyn_dtree));
+    es->opt_len = s->opt_len;
+    es->static_len = s->static_len;
+    es->sym_next = s->sym_next;
+    es->matches = s->matches;
+    init_block(s);
+}
+#endif
+
 void ZLIB_INTERNAL _tr_flush_block(deflate_state *s, charf *buf,
                                    ulg stored_len, int last) {
     ulg opt_lenb, static_lenb; /* opt_len and static_len in bytes */

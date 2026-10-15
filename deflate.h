@@ -15,6 +15,10 @@
 
 #include "zutil.h"
 
+#if defined(FASTEST) && defined(Z_TURBO_THREADS)
+#  undef Z_TURBO_THREADS        /* deflate_fast() only: no parallel search */
+#endif
+
 /* define NO_GZIP when compiling if you want to disable gzip header and
    trailer creation by deflate().  NO_GZIP would be used to avoid linking in
    the crc code when it is not needed.  For shared libraries, gzip encoding
@@ -100,6 +104,11 @@ typedef unsigned IPos;
 /* A Pos is an index in the character window. We use short instead of int to
  * save space in the various tables. IPos is used only for parameter passing.
  */
+
+#if defined(Z_TURBO_THREADS) && \
+    (!defined(Z_U8) || defined(UNALIGNED_OK) || defined(FASTEST))
+#  undef Z_TURBO_THREADS
+#endif
 
 typedef struct internal_state {
     z_streamp strm;      /* pointer back to this zlib stream */
@@ -285,6 +294,38 @@ typedef struct internal_state {
     int slid;
     /* True if the hash table has been slid since it was cleared. */
 
+#ifdef Z_TURBO_THREADS
+    struct mt_engine_s *mt;
+    /* zlib-turbo: parallel match search (deflateSetThreads()), or Z_NULL */
+
+    Z_U8 mt_abs;
+    /* Stream position of window[0] */
+
+    int mt_exact;
+    /* True while the window has only been changed by fill_window(), so that
+     * mt_abs is exact
+     */
+
+    int mt_lag;
+    Z_U8 mt_ins;
+    int mt_slides;
+    /* If mt_lag, the hash chains hold the positions before mt_ins only: the
+     * parse has skipped the insertions since, and catches up when it needs
+     * the chains. It also skips the hash table slides, mt_slides of them.
+     */
+
+    Z_U8 mt_floor;
+    /* The first stream position the hash chains can hold: none before it
+     * since the start, a full flush, or a dictionary that replaced the window
+     */
+
+    Z_U8 mt_from;
+    /* The first stream position the workers search: after a mode that
+     * inserts only some positions (levels 0 to 3, Z_HUFFMAN_ONLY, Z_RLE), the
+     * chains are complete only MAX_DIST past the switch back
+     */
+#endif
+
 } FAR deflate_state;
 
 /* Output a byte on the stream.
@@ -316,6 +357,10 @@ void ZLIB_INTERNAL _tr_flush_bits(deflate_state *s);
 void ZLIB_INTERNAL _tr_align(deflate_state *s);
 void ZLIB_INTERNAL _tr_stored_block(deflate_state *s, charf *buf,
                                     ulg stored_len, int last);
+#ifdef Z_TURBO_THREADS
+ulg ZLIB_INTERNAL _tr_block_bound(deflate_state *s);
+void ZLIB_INTERNAL _tr_hand_off(deflate_state *s, deflate_state *es);
+#endif
 
 #define d_code(dist) \
    ((dist) < 256 ? _dist_code[dist] : _dist_code[256+((dist)>>7)])
