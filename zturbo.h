@@ -25,6 +25,25 @@ ZEXTERN const char * ZEXPORT zlibTurboVersion(void);
 */
 
 /*
+     Levels 10 to 12
+
+     deflateInit(), deflateInit2(), deflateParams() and compress2() also take
+   levels 10, 11 and 12, which compress smaller than level 9 (by 4% to 5% on
+   typical data) and more slowly. They are a compressor of their own, with an
+   optimal parse: their output is not zlib's (no zlib level has it), but it is
+   valid deflate data that every inflater decompresses, the same for the same
+   input, flushes and parameters, however the input is fed. They take about
+   23 MB per stream, and keep up to 256 KB of input before they compress it;
+   flushes work as at other levels. Z_FIXED gives fixed codes only, and
+   Z_HUFFMAN_ONLY and Z_RLE work as at other levels. A stream may change
+   among levels 10 to 12 at any time, but between them and levels 0 to 9 only
+   before its first deflate() call: deflateParams() returns Z_STREAM_ERROR
+   otherwise. deflateSetThreads() does not speed them up. Z_BEST_COMPRESSION is
+   still 9. A library built with FASTEST, or for 16-bit int, refuses levels
+   above 9.
+*/
+
+/*
      Multithreaded compression
 
      With deflateSetThreads(), deflate() searches for matches on worker threads

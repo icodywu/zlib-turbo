@@ -84,6 +84,112 @@ local void mt_restart(deflate_state *s, Z_U8 at, int partial);
 #endif
 local block_state deflate_rle(deflate_state *s, int flush);
 local block_state deflate_huff(deflate_state *s, int flush);
+#ifdef Z_TURBO_OPT
+local block_state deflate_opt(deflate_state *s, int flush);
+local int opt_alloc(z_streamp strm, deflate_state *s);
+local void opt_free(z_streamp strm, deflate_state *s);
+local void opt_dictionary(deflate_state *s, const Bytef *dict, uInt len);
+#  define MAX_LEVEL 12
+#else
+#  define MAX_LEVEL 9
+#endif
+
+#ifdef Z_TURBO_OPT
+/* ===========================================================================
+ * zlib-turbo: levels 10 to 12. A compressor of its own, whose output is not
+ * zlib's (levels 0 to 9 keep zlib's): it parses the input OPT_SEG bytes at a
+ * time, with the window before them, and writes them as one or more blocks.
+ *
+ *   - Matches: a binary tree of the window's strings (by a hash of four bytes)
+ *     gives, at each position, the longest match within a search depth and
+ *     the nearest match for each shorter length; a hash of three bytes adds
+ *     the nearest three-byte match. They are kept for the whole segment.
+ *   - Parse: the cheapest path through the segment for a given bit cost of
+ *     every literal, length and distance. The first costs come from the
+ *     statistics of a lazy parse, as zlib's; then each block is parsed
+ *     again with the costs of its own Huffman codes from the parse before,
+ *     several times, keeping the smallest block.
+ *   - Blocks: the segment is split where the statistics change, by dynamic
+ *     programming over candidate boundaries with an entropy estimate of each
+ *     block's size; adjacent blocks merge when that is smaller. Each block is
+ *     written dynamic, fixed or stored, whichever is smallest, with optimal
+ *     length-limited Huffman codes (package-merge) and the shortest coding of
+ *     the code lengths.
+ *
+ * The output depends only on the input and the flushes, not on how the input
+ * is fed: segments end only at flushes and every OPT_SEG bytes. The tree and
+ * the hash tables are kept from one segment to the next. They hold positions
+ * plus abase, which grows as the window moves down in in[], so that entries
+ * from before the window are seen as none without clearing anything; and a
+ * position goes into the tree only once MAX_MATCH bytes follow it, so that its
+ * place in the tree is right.
+ */
+
+#define OPT_SEG (1U << 18)      /* bytes parsed at a time */
+#define OPT_CACHE 8             /* match cache entries per position */
+#define OPT_GRID 256            /* most candidate block boundaries */
+#define OPT_H4_BITS 16          /* hash of four bytes, for the tree */
+#define OPT_H3_BITS 20          /* hash of three bytes: rarely two in a slot */
+#define OPT_UNSEEN 15           /* bits of a symbol the codes do not have */
+#define OPT_GMIN 512            /* fewest symbols between candidate boundaries */
+#define OPT_LL 286              /* literal/length codes */
+#define OPT_BIG 0xffffffffU
+
+/* parameters of the levels besides the search depth and nice length (in
+   configuration_table): parses per block, rounds of block splitting,
+   candidate boundaries */
+local const struct opt_level_s {
+    unsigned passes, rounds, grid;
+} opt_level[3] = {
+/* 10 */ {2, 1, 96},
+/* 11 */ {4, 1, 160},
+/* 12 */ {8, 2, 256}};
+
+/* The codes of a block. */
+typedef struct opt_tree_s {
+    uch ll[OPT_LL + 2], dl[30], bl[19];
+    ush llc[OPT_LL + 2], dlc[30], blc[19];
+    int hlit, hdist, hclen, nrle;
+    ush rle[OPT_LL + 30];       /* code length symbols, extra bits << 5 */
+    ulg bits;                   /* the whole block, header bit to end code */
+} opt_tree;
+
+typedef struct opt_state_s {
+    uchf *zbuf;                 /* zlib's pending_buf, back when done */
+    ulg zbuf_size;
+    uchf *out;                  /* pending_buf while the levels are used */
+    Bytef *in;                  /* window, then the bytes to parse */
+    unsigned len;               /* bytes in in[] */
+    unsigned start;             /* where the bytes not yet parsed start */
+    int fresh;                  /* in[] empty: take the window from s */
+    unsigned *child, *h4, *h3;  /* binary tree, hash tables: positions plus
+                                   abase, 0 for none */
+    unsigned abase;             /* added to positions in in[] when kept */
+    unsigned ins;               /* the first position not in the tree yet */
+    unsigned *off;              /* cache[off[i]..off[i + 1]): matches at i */
+    unsigned *cache;            /* matches: length << 16 | distance - 1 */
+    unsigned *cost, *ch;        /* parse: cost to the end, choice */
+    unsigned *sym, *sym2, *tmp; /* symbols: length << 16 | literal or dist-1 */
+    unsigned *flog;             /* f * 16 log2(f) */
+    unsigned *pf;               /* symbol counts at candidate boundaries */
+    unsigned nflog;
+    ulg bb;                     /* bit buffer */
+    int bc;                     /* bits in bb */
+    uch dslot[512];             /* distance code of dist - 1, as d_code() */
+    uch lslot[259];             /* length code - 257 of a length */
+    /* scratch */
+    unsigned lc[259], dc[30], litc[256];
+    unsigned fll[OPT_LL + 2], fd[30];
+    uch pm[16][2 * (OPT_LL + 2)];
+    ulg pw[2][2 * (OPT_LL + 2)];
+    ush order[OPT_LL + 2];
+    ulg rc[OPT_LL + 31];
+    ush rch[OPT_LL + 31];
+    ulg sb[OPT_GRID + 1];
+    ush sf[OPT_GRID + 1];
+    opt_tree t, t2;
+} opt_state;
+#endif /* Z_TURBO_OPT */
 
 /* ===========================================================================
  * Local data
@@ -116,7 +222,7 @@ local const config configuration_table[2] = {
 /* 0 */ {0,    0,  0,    0, deflate_stored},  /* store only */
 /* 1 */ {4,    4,  8,    4, deflate_fast}}; /* max speed, no lazy matches */
 #else
-local const config configuration_table[10] = {
+local const config configuration_table[MAX_LEVEL + 1] = {
 /*      good lazy nice chain */
 /* 0 */ {0,    0,  0,    0, deflate_stored},  /* store only */
 /* 1 */ {4,    4,  8,    4, deflate_fast}, /* max speed, no lazy matches */
@@ -128,7 +234,14 @@ local const config configuration_table[10] = {
 /* 6 */ {8,   16, 128, 128, deflate_slow},
 /* 7 */ {8,   32, 128, 256, deflate_slow},
 /* 8 */ {32, 128, 258, 1024, deflate_slow},
-/* 9 */ {32, 258, 258, 4096, deflate_slow}}; /* max compression */
+/* 9 */ {32, 258, 258, 4096, deflate_slow}, /* max compression */
+#ifdef Z_TURBO_OPT
+/* zlib-turbo: levels 10 to 12, nice length and search depth only */
+/* 10 */ {0,    0,  96,   24, deflate_opt},
+/* 11 */ {0,    0, 160,   64, deflate_opt},
+/* 12 */ {0,    0, 258,  256, deflate_opt},
+#endif
+};
 #endif
 
 /* Note: the deflate() code requires max_lazy >= MIN_MATCH and max_chain >= 4
@@ -457,7 +570,8 @@ int ZEXPORT deflateInit2_(z_streamp strm, int level, int method,
     }
 #endif
     if (memLevel < 1 || memLevel > MAX_MEM_LEVEL || method != Z_DEFLATED ||
-        windowBits < 8 || windowBits > 15 || level < 0 || level > 9 ||
+        windowBits < 8 || windowBits > 15 || level < 0 ||
+        level > MAX_LEVEL ||
         strategy < 0 || strategy > Z_FIXED || (windowBits == 8 && wrap != 1)) {
         return Z_STREAM_ERROR;
     }
@@ -553,6 +667,14 @@ int ZEXPORT deflateInit2_(z_streamp strm, int level, int method,
     s->level = level;
     s->strategy = strategy;
     s->method = (Byte)method;
+#ifdef Z_TURBO_OPT
+    if (level > 9 && opt_alloc(strm, s) != Z_OK) {
+        s->status = FINISH_STATE;
+        strm->msg = ERR_MSG(Z_MEM_ERROR);
+        deflateEnd (strm);
+        return Z_MEM_ERROR;
+    }
+#endif
 
     return deflateReset(strm);
 }
@@ -599,6 +721,12 @@ int ZEXPORT deflateSetDictionary(z_streamp strm, const Bytef *dictionary,
     /* when using zlib wrappers, compute Adler-32 for provided dictionary */
     if (wrap == 1)
         strm->adler = adler32(strm->adler, dictionary, dictLength);
+#ifdef Z_TURBO_OPT
+    if (s->opt != Z_NULL && !s->opt->fresh) {
+        opt_dictionary(s, dictionary, dictLength);
+        return Z_OK;
+    }
+#endif
     s->wrap = 0;                    /* avoid computing Adler-32 in read_buf */
 
     /* if dictionary would fill window, just replace the history */
@@ -664,6 +792,16 @@ int ZEXPORT deflateGetDictionary(z_streamp strm, Bytef *dictionary,
     if (deflateStateCheck(strm))
         return Z_STREAM_ERROR;
     s = strm->state;
+#ifdef Z_TURBO_OPT
+    if (s->opt != Z_NULL && !s->opt->fresh) {
+        len = s->opt->len < s->w_size ? s->opt->len : s->w_size;
+        if (dictionary != Z_NULL && len)
+            zmemcpy(dictionary, s->opt->in + s->opt->len - len, len);
+        if (dictLength != Z_NULL)
+            *dictLength = len;
+        return Z_OK;
+    }
+#endif
     len = s->strstart + s->lookahead;
     if (len > s->w_size)
         len = s->w_size;
@@ -866,6 +1004,13 @@ local void lm_init(deflate_state *s) {
     s->mt_from = 0;
     mt_reset(s);
 #endif
+#ifdef Z_TURBO_OPT
+    if (s->opt != Z_NULL) {
+        s->opt->abase += s->opt->len + 1;       /* opt_forget() */
+        s->opt->len = s->opt->start = s->opt->ins = 0;
+        s->opt->fresh = 1;
+    }
+#endif
 }
 
 /* ========================================================================= */
@@ -958,9 +1103,25 @@ int ZEXPORT deflateParams(z_streamp strm, int level, int strategy) {
 #else
     if (level == Z_DEFAULT_COMPRESSION) level = 6;
 #endif
-    if (level < 0 || level > 9 || strategy < 0 || strategy > Z_FIXED) {
+    if (level < 0 || level > MAX_LEVEL || strategy < 0 ||
+        strategy > Z_FIXED) {
         return Z_STREAM_ERROR;
     }
+#ifdef Z_TURBO_OPT
+    if ((level > 9) != (s->level > 9)) {
+        /* to or from levels 10 to 12: only before deflate() starts */
+        if (s->last_flush != -2 || s->pending)
+            return Z_STREAM_ERROR;
+        if (level > 9) {
+            if (opt_alloc(strm, s) != Z_OK) {
+                opt_free(strm, s);
+                return Z_MEM_ERROR;
+            }
+        }
+        else
+            opt_free(strm, s);
+    }
+#endif
     func = configuration_table[s->level].func;
 #if defined(Z_TURBO_THREADS) && !defined(FASTEST)
     /* whether the stream so far inserted every position in the hash chains */
@@ -1491,6 +1652,9 @@ int ZEXPORT deflateEnd(z_streamp strm) {
 #ifdef Z_TURBO_THREADS
     mt_free(strm, strm->state);
 #endif
+#ifdef Z_TURBO_OPT
+    opt_free(strm, strm->state);
+#endif
     TRY_FREE(strm, strm->state->pending_buf);
     TRY_FREE(strm, strm->state->head);
     TRY_FREE(strm, strm->state->prev);
@@ -1534,6 +1698,9 @@ int ZEXPORT deflateCopy(z_streamp dest, z_streamp source) {
 #ifdef Z_TURBO_THREADS
     ds->mt = Z_NULL;
 #endif
+#ifdef Z_TURBO_OPT
+    ds->opt = Z_NULL;
+#endif
 
     ds->window = (Bytef *) ZALLOC(dest, ds->w_size, 2*sizeof(Byte));
     ds->prev   = (Posf *)  ZALLOC(dest, ds->w_size, sizeof(Pos));
@@ -1553,6 +1720,9 @@ int ZEXPORT deflateCopy(z_streamp dest, z_streamp source) {
     zmemcpy(ds->head, ss->head, ds->hash_size * sizeof(Pos));
 
     ds->pending_out = ds->pending_buf + (ss->pending_out - ss->pending_buf);
+#ifdef Z_TURBO_OPT
+    if (ss->opt == Z_NULL)
+#endif
     zmemcpy(ds->pending_out, ss->pending_out, ss->pending);
 #ifdef LIT_MEM
     ds->d_buf = (ushf *)(ds->pending_buf + (ds->lit_bufsize << 1));
@@ -1562,6 +1732,29 @@ int ZEXPORT deflateCopy(z_streamp dest, z_streamp source) {
 #else
     ds->sym_buf = ds->pending_buf + ds->lit_bufsize;
     zmemcpy(ds->sym_buf, ss->sym_buf, ss->sym_next);
+#endif
+#ifdef Z_TURBO_OPT
+    if (ss->opt != Z_NULL) {            /* its own pending_buf */
+        if (opt_alloc(dest, ds) != Z_OK) {
+            deflateEnd (dest);
+            return Z_MEM_ERROR;
+        }
+        zmemcpy(ds->opt->in, ss->opt->in, ss->opt->len);
+        zmemcpy(ds->opt->child, ss->opt->child,
+                2 * ss->opt->len * sizeof(unsigned));
+        zmemcpy(ds->opt->h4, ss->opt->h4, (1U << OPT_H4_BITS) *
+                                          sizeof(unsigned));
+        zmemcpy(ds->opt->h3, ss->opt->h3, (1U << OPT_H3_BITS) *
+                                          sizeof(unsigned));
+        ds->opt->abase = ss->opt->abase;
+        ds->opt->ins = ss->opt->ins;
+        ds->opt->len = ss->opt->len;
+        ds->opt->start = ss->opt->start;
+        ds->opt->fresh = ss->opt->fresh;
+        ds->pending_out = ds->pending_buf +
+                          (ss->pending_out - ss->pending_buf);
+        zmemcpy(ds->pending_out, ss->pending_out, ss->pending);
+    }
 #endif
 
     ds->l_desc.dyn_tree = ds->dyn_ltree;
@@ -2816,13 +3009,20 @@ local uInt mt_result(deflate_state *s, mt_slot *sl, IPos cur_match) {
  * its input in case a stored block is shorter, since the window can slide.
  */
 
+/* zlib's pending_buf, also while levels 10 to 12 use one of their own */
+#ifdef Z_TURBO_OPT
+#  define MT_ZBUF(s) ((s)->opt != Z_NULL ? (s)->opt->zbuf : (s)->pending_buf)
+#else
+#  define MT_ZBUF(s) ((s)->pending_buf)
+#endif
+
 /* The start of the symbol buffer: the distances first with LIT_MEM. */
 #ifdef LIT_MEM
 #  define MT_SYM(s) ((uchf *)(s)->d_buf)
-#  define MT_SYM_ZLIB(s) ((s)->pending_buf + ((s)->lit_bufsize << 1))
+#  define MT_SYM_ZLIB(s) (MT_ZBUF(s) + ((s)->lit_bufsize << 1))
 #else
 #  define MT_SYM(s) ((s)->sym_buf)
-#  define MT_SYM_ZLIB(s) ((s)->pending_buf + (s)->lit_bufsize)
+#  define MT_SYM_ZLIB(s) (MT_ZBUF(s) + (s)->lit_bufsize)
 #endif
 
 /* Use the symbol buffer at sym, of 3 * lit_bufsize bytes. */
@@ -3365,3 +3565,1089 @@ local block_state deflate_huff(deflate_state *s, int flush) {
         FLUSH_BLOCK(s, 0);
     return block_done;
 }
+
+#ifdef Z_TURBO_OPT
+local const uch opt_lext[29] = {
+    0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 2, 2, 2, 2, 3, 3, 3, 3, 4, 4, 4, 4,
+    5, 5, 5, 5, 0};
+local const ush opt_lbase[29] = {
+    3, 4, 5, 6, 7, 8, 9, 10, 11, 13, 15, 17, 19, 23, 27, 31, 35, 43, 51, 59,
+    67, 83, 99, 115, 131, 163, 195, 227, 258};
+local const uch opt_dext[30] = {
+    0, 0, 0, 0, 1, 1, 2, 2, 3, 3, 4, 4, 5, 5, 6, 6, 7, 7, 8, 8, 9, 9, 10, 10,
+    11, 11, 12, 12, 13, 13};
+local const ush opt_dbase[30] = {
+    1, 2, 3, 4, 5, 7, 9, 13, 17, 25, 33, 49, 65, 97, 129, 193, 257, 385, 513,
+    769, 1025, 1537, 2049, 3073, 4097, 6145, 8193, 12289, 16385, 24577};
+local const uch opt_blorder[19] = {
+    16, 17, 18, 0, 8, 7, 9, 6, 10, 5, 11, 4, 12, 3, 13, 2, 14, 1, 15};
+
+#define OPT_DSLOT(o, d) ((d) < 256 ? (o)->dslot[d] : \
+                         (o)->dslot[256 + ((d) >> 7)])
+
+/* 16 log2(x) for x >= 1, to a sixteenth of a bit. */
+local unsigned opt_log2(ulg x) {
+    int n = 12, b;
+    unsigned frac = 0;
+
+    while (x >= 8192) {
+        x >>= 1;
+        n++;
+    }
+    while (x < 4096) {
+        x <<= 1;
+        n--;
+    }
+    for (b = 8; b; b >>= 1) {
+        x = (x * x) >> 12;
+        if (x >= 8192) {
+            x >>= 1;
+            frac |= (unsigned)b;
+        }
+    }
+    return 16 * (unsigned)n + frac;
+}
+
+/* ===========================================================================
+ * Optimal code lengths of at most limit bits for freq[0..n-1], by package-
+ * merge. Symbols of zero frequency get no code. Needs two used symbols.
+ */
+local void opt_huff(opt_state *o, const unsigned *freq, int n, int limit,
+                    uch *len) {
+    int m = 0, i, j, k, t, np, cur, sel;
+    ush *ord = o->order;
+    ulg *prev = o->pw[0], *next = o->pw[1], *sw;
+
+    for (i = 0; i < n; i++) {
+        len[i] = 0;
+        if (freq[i]) {                  /* insertion sort by frequency */
+            for (j = m; j > 0 && freq[ord[j - 1]] > freq[i]; j--)
+                ord[j] = ord[j - 1];
+            ord[j] = (ush)i;
+            m++;
+        }
+    }
+    if (m < 2) {
+        if (m == 1)
+            len[ord[0]] = 1;
+        return;
+    }
+    /* deepest list: the leaves */
+    for (i = 0; i < m; i++) {
+        prev[i] = freq[ord[i]];
+        o->pm[limit - 1][i] = 1;
+    }
+    cur = m;
+    for (t = limit - 2; t >= 0; t--) {
+        np = cur >> 1;                  /* packages of the list below */
+        i = j = k = 0;
+        while (i < m || j < np) {
+            if (j >= np || (i < m && (ulg)freq[ord[i]] <= prev[2 * j] +
+                                                       prev[2 * j + 1])) {
+                next[k] = freq[ord[i++]];
+                o->pm[t][k++] = 1;
+            }
+            else {
+                next[k] = prev[2 * j] + prev[2 * j + 1];
+                j++;
+                o->pm[t][k++] = 0;
+            }
+        }
+        cur = k;
+        sw = prev, prev = next, next = sw;
+    }
+    /* take 2m - 2 items from the top list, and as many as they package from
+       the lists below; a leaf is one bit longer for each list it is taken in */
+    sel = 2 * m - 2;
+    for (t = 0; t < limit && sel > 0; t++) {
+        int leaves = 0, packs = 0;
+        for (k = 0; k < sel; k++) {
+            if (o->pm[t][k])
+                len[ord[leaves++]]++;
+            else
+                packs++;
+        }
+        sel = 2 * packs;
+    }
+}
+
+/* Canonical codes, bit-reversed for writing, from the lengths. */
+local void opt_codes(const uch *len, ush *code, int n) {
+    ush count[16], next[16];
+    unsigned c = 0, r, v;
+    int i, b;
+
+    for (i = 0; i < 16; i++)
+        count[i] = 0;
+    for (i = 0; i < n; i++)
+        count[len[i]]++;
+    count[0] = 0;
+    for (b = 1; b < 16; b++) {
+        c = (c + count[b - 1]) << 1;
+        next[b] = (ush)c;
+    }
+    for (i = 0; i < n; i++)
+        if (len[i]) {
+            v = next[len[i]]++;
+            for (r = 0, b = 0; b < len[i]; b++, v >>= 1)
+                r = (r << 1) | (v & 1);
+            code[i] = (ush)r;
+        }
+}
+
+/* Make sure at least two symbols have a frequency, for complete codes. */
+local void opt_two(unsigned *freq, int n) {
+    int i, used = 0;
+
+    for (i = 0; i < n; i++)
+        used += freq[i] != 0;
+    for (i = 0; used < 2 && i < n; i++)
+        if (freq[i] == 0) {
+            freq[i] = 1;
+            used++;
+        }
+}
+
+/* ===========================================================================
+ * The header of a dynamic block for the lengths in t: the shortest run-length
+ * coding of the code lengths for the code length code, which in turn is built
+ * from that coding, a few times over. Returns the header's bits after the
+ * block type.
+ */
+local ulg opt_header(opt_state *o, opt_tree *t) {
+    uch seq[OPT_LL + 30], bl[19];
+    unsigned f[19], blcost[19];
+    ush run[OPT_LL + 31];
+    int n, i, r, it, hclen, best_n = 0;
+    ulg best = OPT_BIG, bits;
+    ush rle[OPT_LL + 30];
+
+    for (t->hlit = OPT_LL; t->hlit > 257 && t->ll[t->hlit - 1] == 0;)
+        t->hlit--;
+    for (t->hdist = 30; t->hdist > 1 && t->dl[t->hdist - 1] == 0;)
+        t->hdist--;
+    n = t->hlit + t->hdist;
+    for (i = 0; i < t->hlit; i++)
+        seq[i] = t->ll[i];
+    for (i = 0; i < t->hdist; i++)
+        seq[t->hlit + i] = t->dl[i];
+    run[n] = 0;
+    for (i = n - 1; i >= 0; i--)
+        run[i] = (ush)(i + 1 < n && seq[i + 1] == seq[i] ? run[i + 1] + 1 : 1);
+    for (i = 0; i < 19; i++)
+        blcost[i] = 4 + (i >= 16 ? 2 : 0);  /* first guess */
+    for (it = 0; it < 3; it++) {
+        int k = 0;
+        /* shortest coding for blcost, by dynamic programming from the end */
+        o->rc[n] = 0;
+        for (i = n - 1; i >= 0; i--) {
+            ulg c = blcost[seq[i]] + o->rc[i + 1], d;
+            ush h = 0;
+            if (seq[i] == 0) {
+                int top = run[i] < 138 ? run[i] : 138;
+                for (r = 3; r <= 10 && r <= top; r++) {
+                    d = blcost[17] + 3 + o->rc[i + r];
+                    if (d < c)
+                        c = d, h = (ush)r;
+                }
+                /* 18: only the longest runs, which leave the rest of the
+                   zeros to a short code */
+                for (r = top - 10 > 11 ? top - 10 : 11; r <= top; r++) {
+                    d = blcost[18] + 7 + o->rc[i + r];
+                    if (d < c)
+                        c = d, h = (ush)r;
+                }
+            }
+            if (i > 0 && seq[i - 1] == seq[i])
+                for (r = 3; r <= 6 && r <= run[i]; r++) {
+                    d = blcost[16] + 2 + o->rc[i + r];
+                    if (d < c)
+                        c = d, h = (ush)(r | 0x100);
+                }
+            o->rc[i] = c;
+            o->rch[i] = h;
+        }
+        for (i = 0; i < 19; i++)
+            f[i] = 0;
+        for (i = 0; i < n;) {
+            r = o->rch[i] & 0xff;
+            if (r == 0) {
+                rle[k++] = seq[i];
+                f[seq[i]]++;
+                i++;
+            }
+            else if (o->rch[i] & 0x100) {
+                rle[k++] = (ush)(16 | (r - 3) << 5);
+                f[16]++;
+                i += r;
+            }
+            else if (r <= 10) {
+                rle[k++] = (ush)(17 | (r - 3) << 5);
+                f[17]++;
+                i += r;
+            }
+            else {
+                rle[k++] = (ush)(18 | (r - 11) << 5);
+                f[18]++;
+                i += r;
+            }
+        }
+        opt_two(f, 19);
+        opt_huff(o, f, 19, 7, bl);
+        for (hclen = 19; hclen > 4 && bl[opt_blorder[hclen - 1]] == 0;)
+            hclen--;
+        bits = 5 + 5 + 4 + 3 * (ulg)hclen;
+        for (i = 0; i < k; i++) {
+            r = rle[i] & 31;
+            bits += bl[r] + (r == 16 ? 2 : r == 17 ? 3 : r == 18 ? 7 : 0);
+        }
+        if (bits < best) {
+            best = bits;
+            best_n = k;
+            t->hclen = hclen;
+            zmemcpy(t->bl, bl, 19);
+            zmemcpy(t->rle, rle, k * sizeof(ush));
+        }
+        for (i = 0; i < 19; i++)
+            blcost[i] = (bl[i] ? bl[i] : 8) +
+                        (i == 16 ? 2 : i == 17 ? 3 : i == 18 ? 7 : 0);
+    }
+    t->nrle = best_n;
+    return best;
+}
+
+/* Symbol counts of syms[0..n-1] into o->fll and o->fd, with the end code. */
+local void opt_count(opt_state *o, const unsigned *syms, unsigned n) {
+    unsigned i, v;
+
+    for (i = 0; i < OPT_LL; i++)
+        o->fll[i] = 0;
+    for (i = 0; i < 30; i++)
+        o->fd[i] = 0;
+    for (i = 0; i < n; i++) {
+        v = syms[i];
+        if (v >> 16) {
+            o->fll[257 + o->lslot[v >> 16]]++;
+            o->fd[OPT_DSLOT(o, v & 0xffff)]++;
+        }
+        else
+            o->fll[v]++;
+    }
+    o->fll[256] = 1;
+}
+
+/* Build t for the counts in o->fll and o->fd: codes and the block's bits. */
+local ulg opt_build(opt_state *o, opt_tree *t) {
+    unsigned fl[OPT_LL], fd[30];
+    ulg bits = 3;
+    int i;
+
+    zmemcpy(fl, o->fll, sizeof(fl));
+    zmemcpy(fd, o->fd, sizeof(fd));
+    opt_two(fl, OPT_LL);
+    opt_two(fd, 30);
+    opt_huff(o, fl, OPT_LL, 15, t->ll);
+    opt_huff(o, fd, 30, 15, t->dl);
+    for (i = 0; i < OPT_LL; i++)
+        bits += (ulg)o->fll[i] *
+                (t->ll[i] + (i > 256 ? opt_lext[i - 257] : 0));
+    for (i = 0; i < 30; i++)
+        bits += (ulg)o->fd[i] * (t->dl[i] + opt_dext[i]);
+    bits += opt_header(o, t);
+    t->bits = bits;
+    return bits;
+}
+
+/* Bits of the counts in o->fll and o->fd as a fixed-code block. */
+local ulg opt_fixed_bits(opt_state *o) {
+    ulg bits = 3;
+    int i;
+
+    for (i = 0; i < OPT_LL; i++)
+        bits += (ulg)o->fll[i] * ((i < 144 ? 8 : i < 256 ? 9 : i < 280 ? 7 :
+                                   8) + (i > 256 ? opt_lext[i - 257] : 0));
+    for (i = 0; i < 30; i++)
+        bits += (ulg)o->fd[i] * (5 + opt_dext[i]);
+    return bits;
+}
+
+/* The parse's costs, 16ths of a bit, from the lengths in t. */
+local void opt_costs_tree(opt_state *o, const opt_tree *t) {
+    unsigned i;
+
+    for (i = 0; i < 256; i++)
+        o->litc[i] = 16 * (t->ll[i] ? t->ll[i] : OPT_UNSEEN);
+    for (i = 3; i <= 258; i++) {
+        unsigned c = 257 + o->lslot[i];
+        o->lc[i] = 16 * ((t->ll[c] ? t->ll[c] : OPT_UNSEEN) +
+                         opt_lext[c - 257]);
+    }
+    for (i = 0; i < 30; i++)
+        o->dc[i] = 16 * ((t->dl[i] ? t->dl[i] : OPT_UNSEEN) + opt_dext[i]);
+}
+
+/* The parse's costs from the counts in o->fll and o->fd: -log2 of each
+   symbol's frequency, as an entropy coder would spend. */
+local void opt_costs_entropy(opt_state *o) {
+    ulg tl = 0, td = 0;
+    unsigned i, lt, ld, c;
+
+    for (i = 0; i < OPT_LL; i++)
+        tl += o->fll[i];
+    for (i = 0; i < 30; i++)
+        td += o->fd[i];
+    lt = opt_log2(tl + 1);
+    ld = opt_log2(td + 1);
+#define OPT_ENT(f, lg) ((f) ? (lg) - opt_log2(f) + 0 : (lg) + 16)
+    for (i = 0; i < 256; i++) {
+        c = OPT_ENT(o->fll[i], lt);
+        o->litc[i] = c < 16 ? 16 : c > 16 * OPT_UNSEEN ? 16 * OPT_UNSEEN : c;
+    }
+    for (i = 3; i <= 258; i++) {
+        unsigned k = 257 + o->lslot[i];
+        c = OPT_ENT(o->fll[k], lt);
+        c = c < 16 ? 16 : c > 16 * OPT_UNSEEN ? 16 * OPT_UNSEEN : c;
+        o->lc[i] = c + 16 * opt_lext[k - 257];
+    }
+    for (i = 0; i < 30; i++) {
+        c = OPT_ENT(o->fd[i], ld);
+        c = c < 16 ? 16 : c > 16 * OPT_UNSEEN ? 16 * OPT_UNSEEN : c;
+        o->dc[i] = c + 16 * opt_dext[i];
+    }
+#undef OPT_ENT
+}
+
+/* The parse's costs of fixed codes. */
+local void opt_costs_fixed(opt_state *o) {
+    unsigned i, c;
+
+    for (i = 0; i < 256; i++)
+        o->litc[i] = 16 * (i < 144 ? 8 : 9);
+    for (i = 3; i <= 258; i++) {
+        c = 257 + o->lslot[i];
+        o->lc[i] = 16 * ((c < 280 ? 7 : 8) + opt_lext[c - 257]);
+    }
+    for (i = 0; i < 30; i++)
+        o->dc[i] = 16 * (5 + opt_dext[i]);
+}
+
+/* ===========================================================================
+ * Matches.
+ */
+local unsigned opt_h4(const Bytef *p) {
+    unsigned v = (unsigned)p[0] | (unsigned)p[1] << 8 | (unsigned)p[2] << 16 |
+                 (unsigned)p[3] << 24;
+    return ((v * 2654435761U) >> (32 - OPT_H4_BITS)) &
+           ((1U << OPT_H4_BITS) - 1);
+}
+
+local unsigned opt_h3(const Bytef *p) {
+    unsigned v = (unsigned)p[0] | (unsigned)p[1] << 8 | (unsigned)p[2] << 16;
+    return ((v * 2654435761U) >> (32 - OPT_H3_BITS)) &
+           ((1U << OPT_H3_BITS) - 1);
+}
+
+/* Find the matches at position p, and put them in out unless it is Z_NULL, by
+   increasing length, each the nearest of its length found; insert p in the
+   hash tables and the tree if ins. max_len is what the input allows (at least
+   3). Returns the number of matches. */
+local unsigned opt_find(opt_state *o, unsigned p, unsigned max_len,
+                        unsigned nice, unsigned depth, unsigned max_dist,
+                        unsigned *out, int ins) {
+    Bytef *in = o->in, *m, *q = o->in + p;
+    unsigned *child = o->child, *lt = Z_NULL, *gt = Z_NULL;
+    unsigned h, cur, c3, lt_len = 0, gt_len = 0, len, best = 2, n = 0;
+    unsigned pa = p + o->abase;         /* p as stored */
+    unsigned cutoff = p > max_dist ? pa - max_dist : o->abase;
+
+    if (nice > max_len)
+        nice = max_len;
+    h = opt_h3(q);                      /* the nearest three-byte match */
+    c3 = o->h3[h];
+    if (ins)
+        o->h3[h] = pa;
+    if (out != Z_NULL && c3 >= cutoff && c3 < pa) {
+        m = in + (c3 - o->abase);
+        if (m[0] == q[0] && m[1] == q[1] && m[2] == q[2]) {
+            out[n++] = 3U << 16 | (pa - c3 - 1);
+            best = 3;
+        }
+    }
+    if (max_len < 4)
+        return n;
+    h = opt_h4(q);
+    cur = o->h4[h];
+    if (ins) {
+        o->h4[h] = pa;
+        lt = child + 2 * p;
+        gt = lt + 1;
+    }
+    for (;;) {
+        if (cur < cutoff || cur >= pa || depth-- == 0) {
+            if (ins)
+                *lt = *gt = 0;
+            break;
+        }
+        m = in + (cur - o->abase);
+        len = lt_len < gt_len ? lt_len : gt_len;
+        if (m[len] == q[len]) {
+            while (++len < max_len && m[len] == q[len])
+                ;
+            if (len > best) {
+                best = len;
+                if (out != Z_NULL) {
+                    if (n == 1 && len >= 4 && pa - cur - 1 <= (out[0] & 0xffff))
+                        n = 0;          /* nearer and longer: drop the 3 */
+                    out[n++] = len << 16 | (pa - cur - 1);
+                }
+            }
+            if (len >= nice) {
+                if (ins) {
+                    *lt = child[2 * (cur - o->abase)];
+                    *gt = child[2 * (cur - o->abase) + 1];
+                }
+                break;
+            }
+        }
+        if (m[len] < q[len]) {
+            if (ins) {
+                *lt = cur;
+                lt = child + 2 * (cur - o->abase) + 1;
+            }
+            lt_len = len;
+            cur = child[2 * (cur - o->abase) + 1];
+        }
+        else {
+            if (ins) {
+                *gt = cur;
+                gt = child + 2 * (cur - o->abase);
+            }
+            gt_len = len;
+            cur = child[2 * (cur - o->abase)];
+        }
+    }
+    return n;
+}
+
+/* ===========================================================================
+ * The cheapest parse of in[a..b) for the costs in o, into o->tmp. Returns the
+ * number of symbols.
+ */
+local unsigned opt_parse(opt_state *o, unsigned a, unsigned b) {
+    unsigned n = b - a, i, k, L, len, end, c, t, best, choice, dist;
+    unsigned *cost = o->cost, *ch = o->ch, *e;
+    const Bytef *in = o->in;
+
+    cost[n] = 0;
+    for (i = n; i-- > 0;) {
+        best = cost[i + 1] + o->litc[in[a + i]];
+        choice = 0;
+        e = o->cache + o->off[a - o->start + i];
+        end = o->off[a - o->start + i + 1] - o->off[a - o->start + i];
+        L = 3;
+        for (k = 0; k < end; k++) {
+            len = e[k] >> 16;
+            if (len > n - i)
+                len = n - i;
+            dist = e[k] & 0xffff;
+            c = o->dc[OPT_DSLOT(o, dist)];
+            for (; L <= len; L++) {
+                t = c + o->lc[L] + cost[i + L];
+                if (t < best) {
+                    best = t;
+                    choice = L << 16 | dist;
+                }
+            }
+        }
+        cost[i] = best;
+        ch[i] = choice;
+    }
+    for (i = 0, k = 0; i < n; k++) {
+        c = ch[i];
+        if (c) {
+            o->tmp[k] = c;
+            i += c >> 16;
+        }
+        else
+            o->tmp[k] = in[a + i++];
+    }
+    return k;
+}
+
+/* Bits of syms[0..n-1] as the best of a dynamic and a fixed block, building
+   the dynamic codes in t. *fixed is set if fixed is better. */
+local ulg opt_bits(opt_state *o, const unsigned *syms, unsigned n,
+                   opt_tree *t, int *fixed) {
+    ulg d, f;
+
+    opt_count(o, syms, n);
+    f = opt_fixed_bits(o);
+    d = opt_build(o, t);
+    *fixed = f <= d;
+    return f <= d ? f : d;
+}
+
+/* Bits of a stored block of n bytes, aligning first (worst case). */
+#define OPT_STORED_BITS(n) (((ulg)(n) / 65535 + 1) * (3 + 7 + 32) + \
+                            8 * (ulg)(n))
+
+/* ===========================================================================
+ * Bit writing into pending_buf.
+ */
+local void opt_put(deflate_state *s, opt_state *o, unsigned v, int n) {
+    o->bb |= (ulg)v << o->bc;
+    o->bc += n;
+    while (o->bc >= 8) {
+        put_byte(s, (Byte)o->bb);
+        o->bb >>= 8;
+        o->bc -= 8;
+    }
+}
+
+/* Write syms[0..n-1] as a block, with t's codes or fixed ones. */
+local void opt_write(deflate_state *s, opt_state *o, const unsigned *syms,
+                     unsigned n, opt_tree *t, int fixed, int last) {
+    unsigned i, v, c, len, d;
+    int k;
+
+    if (fixed) {
+        for (i = 0; i < 288; i++)
+            t->ll[i] = (uch)(i < 144 ? 8 : i < 256 ? 9 : i < 280 ? 7 : 8);
+        for (i = 0; i < 30; i++)
+            t->dl[i] = 5;
+        opt_codes(t->ll, t->llc, 288);
+        opt_codes(t->dl, t->dlc, 30);
+        opt_put(s, o, (unsigned)last | 2, 3);
+    }
+    else {
+        opt_codes(t->ll, t->llc, OPT_LL);
+        opt_codes(t->dl, t->dlc, 30);
+        opt_codes(t->bl, t->blc, 19);
+        opt_put(s, o, (unsigned)last | 4, 3);
+        opt_put(s, o, (unsigned)t->hlit - 257, 5);
+        opt_put(s, o, (unsigned)t->hdist - 1, 5);
+        opt_put(s, o, (unsigned)t->hclen - 4, 4);
+        for (k = 0; k < t->hclen; k++)
+            opt_put(s, o, t->bl[opt_blorder[k]], 3);
+        for (k = 0; k < t->nrle; k++) {
+            c = t->rle[k] & 31;
+            opt_put(s, o, t->blc[c], t->bl[c]);
+            if (c >= 16)
+                opt_put(s, o, t->rle[k] >> 5, c == 16 ? 2 : c == 17 ? 3 : 7);
+        }
+    }
+    for (i = 0; i < n; i++) {
+        v = syms[i];
+        len = v >> 16;
+        if (len) {
+            c = o->lslot[len];
+            opt_put(s, o, t->llc[257 + c], t->ll[257 + c]);
+            if (opt_lext[c])
+                opt_put(s, o, len - opt_lbase[c], opt_lext[c]);
+            d = v & 0xffff;
+            c = OPT_DSLOT(o, d);
+            opt_put(s, o, t->dlc[c], t->dl[c]);
+            if (opt_dext[c])
+                opt_put(s, o, d + 1 - opt_dbase[c], opt_dext[c]);
+        }
+        else
+            opt_put(s, o, t->llc[v], t->ll[v]);
+    }
+    opt_put(s, o, t->llc[256], t->ll[256]);
+}
+
+/* Write in[a..b) as stored blocks. */
+local void opt_stored(deflate_state *s, opt_state *o, unsigned a, unsigned b,
+                      int last) {
+    unsigned n;
+
+    do {
+        n = b - a > 65535 ? 65535 : b - a;
+        opt_put(s, o, (unsigned)(last && a + n == b), 3);
+        s->bi_used = ((o->bc - 1) & 7) + 1;
+        if (o->bc)
+            opt_put(s, o, 0, 8 - o->bc);
+        put_byte(s, (Byte)n);
+        put_byte(s, (Byte)(n >> 8));
+        put_byte(s, (Byte)~n);
+        put_byte(s, (Byte)(~n >> 8));
+        zmemcpy(s->pending_buf + s->pending, o->in + a, n);
+        s->pending += n;
+        a += n;
+    } while (a < b);
+}
+
+/* ===========================================================================
+ * Split the symbols sym[0..ns) of in[a..b) into blocks, by dynamic
+ * programming over candidate boundaries with an entropy estimate of each
+ * block. Puts the boundaries, as symbol indices, in bnd[0..nb], and returns
+ * nb, the number of blocks.
+ */
+local unsigned opt_split(opt_state *o, const unsigned *sym, unsigned ns,
+                         unsigned grid, unsigned *bnd) {
+    unsigned g, np, i, j, k, v, *pf = o->pf, *ci, *cj;
+    ulg *best = o->sb;
+    ush *from = o->sf;
+    ulg c, tl, td, el, ed, ex;
+    unsigned usedl, usedd;
+
+    g = (ns + grid - 1) / grid;
+    if (g < OPT_GMIN)
+        g = OPT_GMIN;
+    np = (ns + g - 1) / g;              /* candidate blocks */
+    if (np <= 1) {
+        bnd[0] = 0;
+        bnd[1] = ns;
+        return 1;
+    }
+    /* counts before each candidate boundary: OPT_LL + 30 per boundary */
+    for (k = 0; k < OPT_LL + 30; k++)
+        pf[k] = 0;
+    for (i = 0, j = 1; j <= np; j++) {
+        unsigned *p = pf + (ulg)j * (OPT_LL + 30);
+        zmemcpy(p, p - (OPT_LL + 30), (OPT_LL + 30) * sizeof(unsigned));
+        for (; i < ns && i < j * g; i++) {
+            v = sym[i];
+            if (v >> 16) {
+                p[257 + o->lslot[v >> 16]]++;
+                p[OPT_LL + OPT_DSLOT(o, v & 0xffff)]++;
+            }
+            else
+                p[v]++;
+        }
+    }
+    best[0] = 0;
+    for (j = 1; j <= np; j++) {
+        best[j] = (ulg)-1;
+        cj = pf + (ulg)j * (OPT_LL + 30);
+        for (i = 0; i < j; i++) {
+            ci = pf + (ulg)i * (OPT_LL + 30);
+            tl = 1, td = 0, el = 0, ed = 0, ex = 0, usedl = 1, usedd = 0;
+            for (k = 0; k < OPT_LL; k++) {
+                v = cj[k] - ci[k];
+                if (v) {
+                    tl += v;
+                    el += o->flog[v];
+                    usedl++;
+                    if (k > 256)
+                        ex += (ulg)v * opt_lext[k - 257];
+                }
+            }
+            for (k = 0; k < 30; k++) {
+                v = cj[OPT_LL + k] - ci[OPT_LL + k];
+                if (v) {
+                    td += v;
+                    ed += o->flog[v];
+                    usedd++;
+                    ex += (ulg)v * opt_dext[k];
+                }
+            }
+            c = best[i] + o->flog[tl] - el + o->flog[td] - ed + 16 * ex +
+                16 * (40 + 4 * (ulg)(usedl + usedd));
+            if (c < best[j]) {
+                best[j] = c;
+                from[j] = (ush)i;
+            }
+        }
+    }
+    for (k = 0, j = np; j; j = from[j])
+        k++;
+    bnd[k] = ns;
+    for (i = k, j = np; j; j = from[j])
+        bnd[--i] = from[j] * g < ns ? from[j] * g : ns;
+    bnd[0] = 0;
+    return k;
+}
+
+/* ===========================================================================
+ * Compress in[start..end) as one or more blocks into pending_buf.
+ */
+local unsigned opt_segment(deflate_state *s, opt_state *o, unsigned end,
+                           int last) {
+    const struct opt_level_s *lv = opt_level + (s->level - 10);
+    unsigned start = o->start, n = end - start, p, q, i, k, ns, nb = 0, a, b;
+    unsigned r, lim;
+    unsigned max_dist = s->w_size, nice = s->nice_match, depth;
+    unsigned bnd[OPT_GRID + 2], pos[OPT_GRID + 2];
+    unsigned char kind[OPT_GRID + 2];   /* 0 dynamic, 1 fixed, 2 stored */
+    ulg cst[OPT_GRID + 2], total, bits;
+    unsigned room = OPT_SEG * OPT_CACHE;
+    int fixed;
+    unsigned *sym = o->sym, *sym2 = o->sym2, *sw;
+
+    depth = s->max_chain_length;
+    if (nice > MAX_MATCH)
+        nice = MAX_MATCH;
+    o->bb = s->bi_buf;
+    o->bc = s->bi_valid;
+    while (o->bc >= 8) {
+        put_byte(s, (Byte)o->bb);
+        o->bb >>= 8;
+        o->bc -= 8;
+    }
+    if (n == 0) {                       /* only for the last block */
+        opt_put(s, o, 3, 3);            /* fixed, last */
+        opt_put(s, o, 0, 7);            /* end code */
+        goto done;
+    }
+
+    /* the positions before start not in the tree yet, then the matches; a
+       position goes into the tree once MAX_MATCH bytes follow it */
+    lim = o->len > MAX_MATCH ? o->len - MAX_MATCH : 0;
+    for (p = o->ins; p < start && p < lim; p++)
+        opt_find(o, p, MAX_MATCH, nice, depth, max_dist, Z_NULL, 1);
+    o->off[0] = 0;
+    for (i = 0; i < n; i++) {
+        if (o->off[i] + MAX_MATCH > room) {     /* cache full: stop here */
+            n = i;
+            end = start + n;
+            last = 0;
+            break;
+        }
+        p = start + i;
+        q = end - p > MAX_MATCH ? MAX_MATCH : end - p;
+        k = q >= 3 ? opt_find(o, p, q, nice, depth, max_dist,
+                              o->cache + o->off[i], p < lim) : 0;
+        o->off[i + 1] = o->off[i] + k;
+        if (k && (o->cache[o->off[i] + k - 1] >> 16) >= nice) {
+            r = o->cache[o->off[i] + k - 1] >> 16;  /* long: skip into it */
+            while (--r && i + 1 < n) {
+                i++;
+                p++;
+                if (p < lim)
+                    opt_find(o, p, MAX_MATCH, nice, depth, max_dist, Z_NULL,
+                             1);
+                o->off[i + 1] = o->off[i];
+            }
+        }
+    }
+
+    p = start + n < lim ? start + n : lim;  /* all before p are in the tree */
+    if (p > o->ins)
+        o->ins = p;
+
+    if (s->strategy == Z_FIXED) {       /* fixed codes only */
+        opt_costs_fixed(o);
+        ns = opt_parse(o, start, end);
+        opt_count(o, o->tmp, ns);
+        if (opt_fixed_bits(o) < OPT_STORED_BITS(n)) {
+            opt_write(s, o, o->tmp, ns, &o->t, 1, last);
+        }
+        else
+            opt_stored(s, o, start, end, last);
+        goto done;
+    }
+
+    /* first costs: the statistics of a lazy parse, as zlib's */
+    for (i = 0, ns = 0; i < n; ns++) {
+        k = o->off[i + 1] - o->off[i];
+        if (k) {
+            r = o->cache[o->off[i] + k - 1];
+            if ((r >> 16) > n - i)
+                r = (n - i) << 16 | (r & 0xffff);
+            if ((r >> 16) == 3 && (r & 0xffff) >= 4096)
+                r = 0;                  /* zlib's TOO_FAR */
+            if (r && i + 1 < n && o->off[i + 2] > o->off[i + 1] &&
+                (o->cache[o->off[i + 2] - 1] >> 16) > (r >> 16))
+                r = 0;                  /* longer at the next position */
+            if ((r >> 16) >= 3) {
+                sym[ns] = r;
+                i += r >> 16;
+                continue;
+            }
+        }
+        sym[ns] = o->in[start + i++];
+    }
+    opt_count(o, sym, ns);
+    opt_costs_entropy(o);
+    ns = opt_parse(o, start, end);
+    opt_count(o, o->tmp, ns);
+    opt_costs_entropy(o);
+    ns = opt_parse(o, start, end);
+    zmemcpy(sym, o->tmp, ns * sizeof(unsigned));
+
+    for (r = 0; r < lv->rounds; r++) {
+        unsigned w = 0;
+        nb = opt_split(o, sym, ns, lv->grid, bnd);
+        /* positions of the boundaries */
+        for (i = 0, k = 0, p = start; k <= nb; k++) {
+            for (; i < bnd[k]; i++)
+                p += sym[i] >> 16 ? sym[i] >> 16 : 1;
+            pos[k] = p;
+        }
+        /* parse each block again with its own codes */
+        for (k = 0; k < nb; k++) {
+            unsigned bs = bnd[k], bn = bnd[k + 1] - bnd[k], pass, tn;
+            ulg best;
+            a = pos[k];
+            b = pos[k + 1];
+            best = opt_bits(o, sym + bs, bn, &o->t, &fixed);
+            zmemcpy(sym2 + w, sym + bs, bn * sizeof(unsigned));
+            for (pass = 0; pass < lv->passes; pass++) {
+                if (fixed)
+                    opt_costs_fixed(o);
+                else
+                    opt_costs_tree(o, &o->t);
+                tn = opt_parse(o, a, b);
+                bits = opt_bits(o, o->tmp, tn, &o->t, &fixed);
+                if (bits >= best)
+                    break;
+                best = bits;
+                bn = tn;
+                zmemcpy(sym2 + w, o->tmp, tn * sizeof(unsigned));
+            }
+            bnd[k] = w;
+            w += bn;
+        }
+        bnd[nb] = w;
+        sw = sym, sym = sym2, sym2 = sw;
+        ns = w;
+    }
+    o->sym = sym;
+    o->sym2 = sym2;
+
+    /* each block's kind, then merge adjacent blocks when that is smaller */
+    for (k = 0; k < nb; k++) {
+        cst[k] = opt_bits(o, sym + bnd[k], bnd[k + 1] - bnd[k], &o->t,
+                          &fixed);
+        kind[k] = (unsigned char)fixed;
+        if (OPT_STORED_BITS(pos[k + 1] - pos[k]) < cst[k]) {
+            cst[k] = OPT_STORED_BITS(pos[k + 1] - pos[k]);
+            kind[k] = 2;
+        }
+    }
+    total = nb ? cst[0] : 0;
+    for (k = 1, i = 1; k < nb; k++) {
+        if (kind[i - 1] != 2 && kind[k] != 2) {
+            bits = opt_bits(o, sym + bnd[i - 1], bnd[k + 1] - bnd[i - 1],
+                            &o->t, &fixed);
+            if (bits <= cst[i - 1] + cst[k]) {
+                total += bits - cst[i - 1];
+                cst[i - 1] = bits;
+                kind[i - 1] = (unsigned char)fixed;
+                bnd[i] = bnd[k + 1];
+                pos[i] = pos[k + 1];
+                continue;
+            }
+        }
+        bnd[i] = bnd[k];
+        pos[i] = pos[k];
+        cst[i] = cst[k];
+        kind[i] = kind[k];
+        total += cst[k];
+        i++;
+        bnd[i] = bnd[k + 1];
+        pos[i] = pos[k + 1];
+    }
+    nb = i;
+    if (total > OPT_STORED_BITS(n)) {   /* all stored is smaller */
+        opt_stored(s, o, start, end, last);
+        goto done;
+    }
+    for (k = 0; k < nb; k++) {
+        if (kind[k] == 2) {             /* stored, with the stored after */
+            for (i = k; i + 1 < nb && kind[i + 1] == 2; i++)
+                ;
+            opt_stored(s, o, pos[k], pos[i + 1], last && i + 1 == nb);
+            k = i;
+            continue;
+        }
+        opt_bits(o, sym + bnd[k], bnd[k + 1] - bnd[k], &o->t, &fixed);
+        opt_write(s, o, sym + bnd[k], bnd[k + 1] - bnd[k], &o->t,
+                  kind[k] == 1, last && k + 1 == nb);
+    }
+  done:
+    if (last) {
+        s->bi_used = ((o->bc - 1) & 7) + 1;
+        if (o->bc)
+            opt_put(s, o, 0, 8 - o->bc);
+    }
+    s->bi_buf = (ush)o->bb;
+    s->bi_valid = o->bc;
+    return end;
+}
+
+/* ===========================================================================
+ * Memory of the levels: allocate on the way in, free on the way out.
+ */
+local int opt_alloc(z_streamp strm, deflate_state *s) {
+    opt_state *o;
+    unsigned i, d, c, win = s->w_size;
+
+    o = (opt_state *)ZALLOC(strm, 1, sizeof(opt_state));
+    if (o == Z_NULL)
+        return Z_MEM_ERROR;
+    zmemzero(o, sizeof(opt_state));
+    s->opt = o;
+    o->in = (Bytef *)ZALLOC(strm, win + OPT_SEG + 8, 1);
+    o->child = (unsigned *)ZALLOC(strm, 2 * (win + OPT_SEG), sizeof(unsigned));
+    o->h4 = (unsigned *)ZALLOC(strm, 1U << OPT_H4_BITS, sizeof(unsigned));
+    o->h3 = (unsigned *)ZALLOC(strm, 1U << OPT_H3_BITS, sizeof(unsigned));
+    o->off = (unsigned *)ZALLOC(strm, OPT_SEG + 1, sizeof(unsigned));
+    o->cache = (unsigned *)ZALLOC(strm, OPT_SEG * OPT_CACHE + MAX_MATCH,
+                                  sizeof(unsigned));
+    o->cost = (unsigned *)ZALLOC(strm, OPT_SEG + 1, sizeof(unsigned));
+    o->ch = (unsigned *)ZALLOC(strm, OPT_SEG + 1, sizeof(unsigned));
+    o->sym = (unsigned *)ZALLOC(strm, OPT_SEG + 1, sizeof(unsigned));
+    o->sym2 = (unsigned *)ZALLOC(strm, OPT_SEG + 1, sizeof(unsigned));
+    o->tmp = (unsigned *)ZALLOC(strm, OPT_SEG + 1, sizeof(unsigned));
+    o->nflog = OPT_SEG + 2;
+    o->flog = (unsigned *)ZALLOC(strm, o->nflog, sizeof(unsigned));
+    o->pf = (unsigned *)ZALLOC(strm, (OPT_GRID + 1) * (OPT_LL + 30),
+                               sizeof(unsigned));
+    o->out = (uchf *)ZALLOC(strm, OPT_SEG + (OPT_SEG >> 4) + 4096, 1);
+    if (o->in == Z_NULL || o->child == Z_NULL || o->h4 == Z_NULL ||
+        o->h3 == Z_NULL || o->off == Z_NULL || o->cache == Z_NULL ||
+        o->cost == Z_NULL || o->ch == Z_NULL || o->sym == Z_NULL ||
+        o->sym2 == Z_NULL || o->tmp == Z_NULL || o->flog == Z_NULL ||
+        o->pf == Z_NULL || o->out == Z_NULL)
+        return Z_MEM_ERROR;             /* opt_free() frees the rest */
+    zmemzero(o->h4, (1U << OPT_H4_BITS) * sizeof(unsigned));
+    zmemzero(o->h3, (1U << OPT_H3_BITS) * sizeof(unsigned));
+    o->abase = 1;
+    for (i = 0; i < o->nflog; i++)
+        o->flog[i] = i ? i * opt_log2(i) : 0;
+    for (d = 0, c = 0; c < 30; c++)     /* d_code() of zlib, for dist - 1 */
+        for (i = 0; i < (1U << opt_dext[c]); i++, d++)
+            if (d < 256)
+                o->dslot[d] = (uch)c;
+            else if ((d >> 7) < 256)
+                o->dslot[256 + (d >> 7)] = (uch)c;
+    for (c = 0; c < 29; c++)
+        for (i = opt_lbase[c]; i < (c == 28 ? 259U : opt_lbase[c + 1]); i++)
+            o->lslot[i] = (uch)c;
+    o->lslot[258] = 28;
+    o->zbuf = s->pending_buf;
+    o->zbuf_size = s->pending_buf_size;
+    s->pending_buf = o->out;
+    s->pending_out = o->out;
+    s->pending_buf_size = OPT_SEG + (OPT_SEG >> 4) + 4096;
+    o->fresh = 1;
+    return Z_OK;
+}
+
+local void opt_free(z_streamp strm, deflate_state *s) {
+    opt_state *o = s->opt;
+
+    if (o == Z_NULL)
+        return;
+    if (o->zbuf != Z_NULL) {
+        s->pending_buf = o->zbuf;
+        s->pending_out = o->zbuf;
+        s->pending_buf_size = o->zbuf_size;
+    }
+    TRY_FREE(strm, o->out);
+    TRY_FREE(strm, o->pf);
+    TRY_FREE(strm, o->flog);
+    TRY_FREE(strm, o->tmp);
+    TRY_FREE(strm, o->sym2);
+    TRY_FREE(strm, o->sym);
+    TRY_FREE(strm, o->ch);
+    TRY_FREE(strm, o->cost);
+    TRY_FREE(strm, o->cache);
+    TRY_FREE(strm, o->off);
+    TRY_FREE(strm, o->h3);
+    TRY_FREE(strm, o->h4);
+    TRY_FREE(strm, o->child);
+    TRY_FREE(strm, o->in);
+    ZFREE(strm, o);
+    s->opt = Z_NULL;
+}
+
+/* Keep the last w_size bytes before in[o->start] as the window. */
+local void opt_keep(deflate_state *s, opt_state *o) {
+    unsigned from = o->start > s->w_size ? o->start - s->w_size : 0;
+
+    unsigned i;
+
+    if (from) {
+        for (i = 0; i < o->len - from; i++)     /* overlapping: forward */
+            o->in[i] = o->in[from + i];
+        for (i = 0; i < 2 * (o->len - from); i++)
+            o->child[i] = o->child[2 * from + i];
+        o->len -= from;
+        o->start -= from;
+        o->ins -= from;
+        o->abase += from;
+    }
+}
+
+/* Forget the window: what the tables hold is then before it. */
+local void opt_forget(opt_state *o) {
+    o->abase += o->len + 1;
+    o->len = o->start = o->ins = 0;
+}
+
+/* ===========================================================================
+ * The compress function of levels 10 to 12.
+ */
+local block_state deflate_opt(deflate_state *s, int flush) {
+    opt_state *o = s->opt;
+    z_streamp strm = s->strm;
+    unsigned cap, end;
+    int last;
+
+    if (o->fresh) {                     /* the window: a dictionary, if any */
+        unsigned n = s->strstart + s->lookahead;
+        if (n > s->w_size)
+            n = s->w_size;
+        zmemcpy(o->in, s->window + s->strstart + s->lookahead - n, n);
+        o->len = o->start = n;
+        o->ins = 0;
+        s->strstart = 0;
+        s->lookahead = 0;
+        o->fresh = 0;
+    }
+    for (;;) {
+        if (o->abase > 0x7fffffffU) {   /* positions as stored about to wrap */
+            zmemzero(o->h4, (1U << OPT_H4_BITS) * sizeof(unsigned));
+            zmemzero(o->h3, (1U << OPT_H3_BITS) * sizeof(unsigned));
+            o->abase = 1;
+            o->ins = 0;
+        }
+        cap = o->start + OPT_SEG;
+        if (o->len < cap && strm->avail_in)
+            o->len += read_buf(strm, o->in + o->len, cap - o->len);
+        s->lookahead = o->len - o->start;
+        if (o->len < cap && flush == Z_NO_FLUSH)
+            return need_more;
+        last = flush == Z_FINISH && strm->avail_in == 0;
+        if (o->len == o->start && !last)
+            break;
+        end = opt_segment(s, o, o->len, last);
+        if (end < o->len)
+            last = 0;
+        o->start = end;
+        s->lookahead = o->len - o->start;
+        opt_keep(s, o);
+        flush_pending(strm);
+        if (last)
+            return strm->avail_out == 0 ? finish_started : finish_done;
+        if (strm->avail_out == 0)
+            return need_more;
+        if (strm->avail_in == 0 && flush == Z_NO_FLUSH)
+            return need_more;
+    }
+    if (flush == Z_FULL_FLUSH)          /* no matches before a full flush */
+        opt_forget(o);
+    return block_done;
+}
+
+/* deflateSetDictionary() after levels 10 to 12 have started: the dictionary
+   goes after their window. */
+local void opt_dictionary(deflate_state *s, const Bytef *dict, uInt len) {
+    opt_state *o = s->opt;
+
+    if (len >= s->w_size) {
+        dict += len - s->w_size;
+        len = s->w_size;
+        opt_forget(o);
+    }
+    o->start = o->len;
+    opt_keep(s, o);
+    zmemcpy(o->in + o->len, dict, len);
+    o->len += len;
+    o->start = o->len;
+    opt_keep(s, o);
+}
+#endif /* Z_TURBO_OPT */

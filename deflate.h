@@ -19,6 +19,14 @@
 #  undef Z_TURBO_THREADS        /* deflate_fast() only: no parallel search */
 #endif
 
+/* zlib-turbo: levels 10 to 12 (not with FASTEST or 16-bit int) */
+#if !defined(FASTEST) && !defined(MAXSEG_64K) && !defined(NO_TURBO_OPT)
+#  include <limits.h>
+#  if UINT_MAX >= 0xffffffffUL
+#    define Z_TURBO_OPT
+#  endif
+#endif
+
 /* define NO_GZIP when compiling if you want to disable gzip header and
    trailer creation by deflate().  NO_GZIP would be used to avoid linking in
    the crc code when it is not needed.  For shared libraries, gzip encoding
@@ -324,6 +332,10 @@ typedef struct internal_state {
      * inserts only some positions (levels 0 to 3, Z_HUFFMAN_ONLY, Z_RLE), the
      * chains are complete only MAX_DIST past the switch back
      */
+#endif
+#ifdef Z_TURBO_OPT
+    struct opt_state_s *opt;
+    /* zlib-turbo: the compressor of levels 10 to 12, or Z_NULL */
 #endif
 
 } FAR deflate_state;
