@@ -1,3 +1,7 @@
+/* Copyright (C) 2026 Yingquan (Cody) Wu
+ * For conditions of distribution and use, see copyright notice in zlib.h
+ */
+
 /* libFuzzer target: inflate of stock zlib (a shared library opened with dlopen, not instrumented) and of
    the patched zlib (linked in, with ASAN or UBSAN) must agree on every input: the same return code, the same
    number of bytes out, and the same bytes, with the same input and output pieces.

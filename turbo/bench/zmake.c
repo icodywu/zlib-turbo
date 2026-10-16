@@ -1,3 +1,7 @@
+/* Copyright (C) 2026 Yingquan (Cody) Wu
+ * For conditions of distribution and use, see copyright notice in zlib.h
+ */
+
 /* zmake: compress each file to file.z (zlib format, or gzip with ZGZIP set in the environment) at the given level
    with the linked zlib's deflate, as compress2() would (windowBits 15, memLevel 8, default strategy).
    usage: zmake level file... */

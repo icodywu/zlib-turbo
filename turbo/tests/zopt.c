@@ -1,3 +1,7 @@
+/* Copyright (C) 2026 Yingquan (Cody) Wu
+ * For conditions of distribution and use, see copyright notice in zlib.h
+ */
+
 /* zopt: tests and speed of zlib-turbo levels 10 to 12.
    zopt ratio LEVEL FILE...   one deflate() call per file: size, MB/s, round trip
    zopt check FILE...         streams with many feeding/flush patterns, all levels

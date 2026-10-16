@@ -1,3 +1,7 @@
+/* Copyright (C) 2026 Yingquan (Cody) Wu
+ * For conditions of distribution and use, see copyright notice in zlib.h
+ */
+
 /* zbench: decompression speed of a zlib-API library (stock or patched zlib, or zlib-ng in compat mode) on zlib streams made by
    zmake (file.z holds the stream; file is the original).
    usage: zbench mode file...   mode 0: one call, whole input and output; mode 1: 16 KiB in / 64 KiB out chunks

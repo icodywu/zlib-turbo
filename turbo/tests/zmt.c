@@ -1,3 +1,7 @@
+/* Copyright (C) 2026 Yingquan (Cody) Wu
+ * For conditions of distribution and use, see copyright notice in zlib.h
+ */
+
 /* zmt: deflateSetThreads() in zlib-turbo.
    zmt speed LEVEL THREADS FILE...   compress each file whole in one deflate() call: MB/s (best of runs in 1 s, at
                                      least 2) and a hash of all output

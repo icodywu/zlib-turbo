@@ -1,3 +1,7 @@
+/* Copyright (C) 2026 Yingquan (Cody) Wu
+ * For conditions of distribution and use, see copyright notice in zlib.h
+ */
+
 /* libFuzzer target: zlib-turbo's levels 10 to 12 (linked in, with ASAN or UBSAN). Every stream must decompress
    with stock zlib's inflate (a shared library opened with dlopen, not instrumented) to the input, and a stream
    made in one deflate() call must fit in deflateBound().

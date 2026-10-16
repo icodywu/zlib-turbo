@@ -1,3 +1,7 @@
+/* Copyright (C) 2026 Yingquan (Cody) Wu
+ * For conditions of distribution and use, see copyright notice in zlib.h
+ */
+
 /* libFuzzer target: deflate of stock zlib (a shared library opened with dlopen, not instrumented) and of the patched
    zlib (linked in, with ASAN or UBSAN) must agree exactly: the same return code from every call and the same
    compressed bytes, for the same sequence of calls.

@@ -1,3 +1,7 @@
+/* Copyright (C) 2026 Yingquan (Cody) Wu
+ * For conditions of distribution and use, see copyright notice in zlib.h
+ */
+
 /* zsum: crc32_z() and adler32_z() of the linked zlib against plain byte-at-a-time references, so that a build with
    the SIMD checksums (-DZ_TURBO_SIMD) can be checked to give the scalar code's results exactly.
    zsum check     every length 0 to 4096 at every alignment 0 to 63, with fixed and random starting values; long

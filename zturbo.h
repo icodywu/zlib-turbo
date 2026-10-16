@@ -1,4 +1,6 @@
 /* zturbo.h -- zlib-turbo extensions to the zlib interface
+ * Copyright (C) 2026 Yingquan (Cody) Wu
+ * For conditions of distribution and use, see copyright notice in zlib.h
  *
  * zlib.h is unchanged in zlib-turbo, and so is everything it declares. This
  * header declares what zlib-turbo adds. Programs that use these functions
@@ -16,6 +18,7 @@ extern "C" {
 
 #define ZLIB_TURBO 1
 #define ZLIB_TURBO_VERSION "1.0.0"
+#define ZLIB_TURBO_VERNUM 0x1000   /* 0xMmp0: major, minor, patch, as ZLIB_VERNUM */
 
 ZEXTERN const char * ZEXPORT zlibTurboVersion(void);
 /*

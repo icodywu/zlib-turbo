@@ -1,3 +1,7 @@
+/* Copyright (C) 2026 Yingquan (Cody) Wu
+ * For conditions of distribution and use, see copyright notice in zlib.h
+ */
+
 /* zstress: inflate correctness on the linked zlib (stock or patched), deterministic, for ASAN/UBSAN builds.
    usage: zstress log file...
    For each file and each deflate configuration below (deflate is the same code in both builds, so the streams are the

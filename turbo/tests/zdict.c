@@ -1,3 +1,7 @@
+/* Copyright (C) 2026 Yingquan (Cody) Wu
+ * For conditions of distribution and use, see copyright notice in zlib.h
+ */
+
 /* zdict: dictionaries in zlib and zlib-turbo.
    zdict check FILE   compresses pieces of FILE with dictionaries from FILE, over levels, window bits, memLevels,
                       strategies and dictionary lengths, through deflateSetDictionary() (path A) and, with zlib-turbo,

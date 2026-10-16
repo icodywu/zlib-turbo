@@ -1,3 +1,7 @@
+/* Copyright (C) 2026 Yingquan (Cody) Wu
+ * For conditions of distribution and use, see copyright notice in zlib.h
+ */
+
 /* zcbench: compression speed of a zlib-API library, each file whole with compress2 at a level (best of the runs in
    at least 1 s, at least 2 runs), plus a hash of all compressed bytes so that builds can be checked for identical
    output.   usage: zcbench level file...  (env ZC_ONCE=1: one run, for profilers; ZGZIP: gzip streams through

@@ -1,3 +1,7 @@
+/* Copyright (C) 2026 Yingquan (Cody) Wu
+ * For conditions of distribution and use, see copyright notice in zlib.h
+ */
+
 /* syncflush: interactive streams (SSH, websocket permessage-deflate, HTTP streaming) rely on inflate giving out every
    byte before a Z_SYNC_FLUSH point once the compressed bytes up to that point are in. Each input is cut into random
    messages, deflated with Z_SYNC_FLUSH after each; inflate is fed exactly each message's compressed bytes (in one

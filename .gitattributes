@@ -1,0 +1,4 @@
+# The test scripts run with sh, and the workflows on Linux: keep them in LF on every checkout.
+*.sh text eol=lf
+*.py text eol=lf
+*.yml text eol=lf

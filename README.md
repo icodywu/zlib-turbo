@@ -1,5 +1,7 @@
 # zlib-turbo
 
+[![zlib-turbo CI](https://github.com/icodywu/zlib-turbo/actions/workflows/turbo.yml/badge.svg)](https://github.com/icodywu/zlib-turbo/actions/workflows/turbo.yml)
+
 **zlib, faster, and byte for byte the same.**
 
 zlib-turbo is zlib 1.3.2 with faster decompression and compression. It has the same API, the same ABI and the
