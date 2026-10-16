@@ -26,6 +26,50 @@ below); and levels 10 to 12, which compress smaller than level 9 with an optimal
 deflate data but not zlib's, since no zlib level has it). Programs that do not use them see plain zlib. A build
 option adds SIMD checksums for x86 processors with AVX2, off by default.
 
+## What is new
+
+zlib-turbo is more than known speedups applied to zlib. It contributes:
+
+1. **Speed without changing a byte, as a guarantee.** Every change at levels 0 to 9 alters how zlib does its work,
+   never what it decides: the same matches in the same order, the same blocks, the same bits, the same return
+   codes. The guarantee is checked against unmodified zlib 1.3.2 rather than against expected outputs: three
+   corpora, nearly 35,000 damaged streams, about 80 million differential fuzzing runs, six processor architectures
+   and MSVC (see [How it was tested](#how-it-was-tested)). Faster zlib-compatible libraries give it up; zlib-turbo
+   shows how much speed there is without giving it up: 66% to 86% in decompression and 4% to 39% in compression on
+   one core, and up to 12 times as fast with threads.
+
+2. **Multithreaded compression whose output is zlib's.** At levels 4 to 9 zlib's hash chains depend only on the
+   input, so the matches its lazy parse will ask for can be found ahead of it. Each worker thread replays zlib's
+   parse over its chunk of input, starting a little before it, so that it searches exactly the positions zlib will
+   search, with the chain length zlib will use. The calling thread keeps every decision of zlib's parse and takes
+   99.99% of its searches from the workers, and finished blocks are written on workers only where zlib would write
+   them too, so even the return codes and pending output match. With 16 threads, level 6 runs 6.8 times as fast as
+   zlib 1.3.2 and level 9 up to 12 times, for the same bytes. We know of no other parallel deflate compressor whose
+   output equals single-threaded zlib's: pigz, the usual parallel gzip, compresses separate pieces, so its bytes
+   differ.
+
+3. **Levels 10 to 12: smaller than libdeflate's best, in zlib's own API.** An optimal-parsing compressor written
+   for zlib-turbo: a binary-tree match finder kept from segment to segment, a parse iterated over exact bit costs,
+   block boundaries by dynamic programming, and the shortest coding of each block's trees. Level 12 is 0.15% to
+   0.33% smaller than libdeflate's level 12 on Silesia, enwik8 and Canterbury + Calgary, 4.0% to 5.7% smaller than
+   zlib's level 9, and within 0.2% of Zopfli at 6 to 11 times its speed. Any program that can ask zlib for a level
+   can ask for these.
+
+4. **Prepared dictionaries.** zlib indexes a dictionary again for every stream. `deflatePrepareDictionary()`
+   indexes it once, and `deflateUseDictionary()` copies the index into each stream, giving exactly the state, and so
+   the output, that `deflateSetDictionary()` gives. Small messages compress up to 4.1 times as fast.
+
+5. **A faster decoder and faster checksums.** A 64-bit fast loop with branch-free refills, larger first-level tables
+   and wide match copies decompresses 66% to 86% faster, with zlib's results for every valid and damaged stream; it
+   is offered back to zlib as [pull request #793](https://github.com/madler/zlib/pull/793). A portable SWAR
+   Adler-32, three multiplications per eight bytes, makes the zlib format's checksum 43% faster. An optional build
+   adds SIMD checksums for x86, with the same results bit for bit: CRC-32 by carry-less multiplication, 5.5 times as
+   fast, and Adler-32 with AVX2, 7.4 times. With them, gzip streams decompress 93% faster than with zlib 1.3.2.
+
+6. **Every number measured and reproducible.** Each change's gain is measured on its own, the ideas that did not
+   pay are listed with their measurements in [`turbo/TECHNIQUES.md`](turbo/TECHNIQUES.md), and the scripts in
+   [`turbo/`](turbo) repeat every comparison against any zlib source tree.
+
 ## Why the same bytes matter
 
 Faster zlib-compatible libraries exist; [zlib-ng](https://github.com/zlib-ng/zlib-ng) is the best known, and on one
