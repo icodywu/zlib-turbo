@@ -28,6 +28,21 @@ option(ZLIB_PREFIX "prefix for all types and library functions, see zconf.h.in"
 mark_as_advanced(ZLIB_PREFIX)
 option(ZLIB_TURBO_THREADS
        "zlib-turbo: deflateSetThreads() searches on several threads" ON)
+option(ZLIB_TURBO_SIMD
+       "zlib-turbo: CRC-32 by PCLMULQDQ and Adler-32 by AVX2 (x86; the library then needs both, no run-time check)"
+       OFF)
+
+if(ZLIB_TURBO_SIMD)
+    if(MSVC)
+        set(ZLIB_TURBO_SIMD_FLAGS "/arch:AVX2")
+    else(MSVC)
+        set(ZLIB_TURBO_SIMD_FLAGS "-mpclmul;-mavx2")
+    endif(MSVC)
+    set_source_files_properties(
+        adler32.c crc32.c
+        PROPERTIES COMPILE_DEFINITIONS Z_TURBO_SIMD
+                   COMPILE_OPTIONS "${ZLIB_TURBO_SIMD_FLAGS}")
+endif(ZLIB_TURBO_SIMD)
 
 if(ZLIB_TURBO_THREADS AND NOT WIN32)
     set(THREADS_PREFER_PTHREAD_FLAG ON)

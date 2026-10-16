@@ -97,6 +97,8 @@ insecure=0
 unknown=0
 enable_crcvx=1
 threads=1
+simd=0
+SIMDFLAGS=
 libs_private=
 old_cc="$CC"
 old_cflags="$CFLAGS"
@@ -125,7 +127,7 @@ case "$1" in
       echo '  configure [--const] [--zprefix] [--prefix=PREFIX]  [--eprefix=EXPREFIX]' | tee -a configure.log
       echo '    [--insecure] [--static] [--64] [--libdir=LIBDIR] [--sharedlibdir=LIBDIR]' | tee -a configure.log
       echo '    [--includedir=INCLUDEDIR] [--mandir=MANDIR]' | tee -a configure.log
-      echo '    [--archs="-arch i386 -arch x86_64"] [--disable-crcvx] [--no-threads]' | tee -a configure.log
+      echo '    [--archs="-arch i386 -arch x86_64"] [--disable-crcvx] [--no-threads] [--simd]' | tee -a configure.log
         exit 0 ;;
     -p*=* | --prefix=*) prefix=`echo $1 | sed 's/[^=]*=//'`; shift ;;
     -e*=* | --eprefix=*) exec_prefix=`echo $1 | sed 's/[^=]*=//'`; shift ;;
@@ -161,6 +163,7 @@ case "$1" in
     --insecure) insecure=1; shift ;;
     --disable-crcvx) enable_crcvx=0; shift ;;
     --no-threads) threads=0; shift ;;
+    --simd) simd=1; shift ;;
     *) unknown=1; echo "unknown option ignored: $1" | tee -a configure.log; shift;;
     esac
 done
@@ -947,6 +950,28 @@ EOF
   fi
 fi
 
+# zlib-turbo: --simd, the CRC-32 by PCLMULQDQ and the Adler-32 by AVX2 (x86); the
+# library then needs a processor with both, as there is no check at run time
+if test $simd -eq 1; then
+  echo >> configure.log
+  cat > $test.c <<EOF
+#include <wmmintrin.h>
+#include <immintrin.h>
+int main(void) {
+    __m128i a = _mm_clmulepi64_si128(_mm_setzero_si128(), _mm_setzero_si128(), 0);
+    __m256i b = _mm256_sad_epu8(_mm256_setzero_si256(), _mm256_setzero_si256());
+    return _mm_cvtsi128_si32(a) + _mm256_extract_epi32(b, 0);
+}
+EOF
+  if try $CC $CFLAGS -mpclmul -mavx2 $LDFLAGS -o $test $test.c; then
+    SIMDFLAGS="-DZ_TURBO_SIMD -mpclmul -mavx2"
+    echo "Checking for SIMD checksums (PCLMULQDQ, AVX2)... Yes." | tee -a configure.log
+  else
+    echo "Checking for SIMD checksums (PCLMULQDQ, AVX2)... No: $CC does not take -mpclmul -mavx2." | tee -a configure.log
+    leave 1
+  fi
+fi
+
 # check for ibm s390x build
 HAVE_S390X=0
 cat > $test.c << EOF
@@ -1045,6 +1070,7 @@ echo uname = $uname >> configure.log
 echo HAVE_S390X = $HAVE_S390X >> configure.log
 echo HAVE_S390X_VX = $HAVE_S390X_VX >> configure.log
 echo VGFMAFLAG = $VGFMAFLAG >> configure.log
+echo SIMDFLAGS = $SIMDFLAGS >> configure.log
 
 # update Makefile with the configure results
 sed < ${SRCDIR}Makefile.in "
@@ -1053,6 +1079,7 @@ sed < ${SRCDIR}Makefile.in "
 /^LLVM_GCOV_FLAG *=/s#=.*#=$LLVM_GCOV_FLAG#
 /^CFLAGS *=/s#=.*#=$CFLAGS#
 /^SFLAGS *=/s#=.*#=$SFLAGS#
+/^SIMDFLAGS *=/s#=.*#=$SIMDFLAGS#
 /^LDFLAGS *=/s#=.*#=$LDFLAGS#
 /^LDSHARED *=/s#=.*#=$LDSHARED#
 /^CPP *=/s#=.*#=$CPP#
