@@ -10,10 +10,11 @@ compressed stream stays as it is in zlib 1.3.2:
 
 The first six changes are in how bits are read and written, how bytes are compared and copied, and how a checksum is
 summed. The seventh lets worker threads find zlib's matches ahead of its parse and write its blocks, while the parse
-itself stays zlib's. Apart from the threads, none of the techniques is new: libdeflate, Zstandard, WZIP and others
-use them, and the sections below name the ones borrowed. The work was fitting them into zlib so that not one output
-byte, return code or error message changes, in any build configuration, and checking that by comparing with
-unmodified zlib (see [How it was tested](../README.md#how-it-was-tested)).
+itself stays zlib's. The eighth adds levels 10 to 12, the one place with output of its own, and the ninth, optional,
+computes the checksums with SIMD instructions. Apart from the threads, none of the techniques is new: libdeflate,
+Zstandard, WZIP and others use them, and the sections below name the ones borrowed. The work was fitting them into
+zlib so that not one output byte, return code or error message changes, in any build configuration, and checking
+that by comparing with unmodified zlib (see [How it was tested](../README.md#how-it-was-tested)).
 
 All measurements here, except those with threads in section 7, are on one core of an AMD EPYC 9334 (Zen 4, 2.7 GHz),
 GCC 14.2 `-O2`, best of two runs. They cover Silesia, Canterbury + Calgary and enwik8, each file compressed whole.
@@ -314,6 +315,33 @@ with the code length code's own costs, three rounds.
 is 0.2% smaller than Zopfli on Silesia and 0.1% to 0.2% larger on the other two, 6 to 11 times as fast. Level 10, at
 5.5 MB/s, is as small as libdeflate's level 12 on Silesia. Table in the [README](../README.md#levels-10-to-12).
 
+## 9. SIMD checksums, optional
+
+*`crc32.c`, `adler32.c`; `configure --simd`, CMake `ZLIB_TURBO_SIMD`, or `-DZ_TURBO_SIMD` with the target flags*
+
+**Why the checksums.** With the faster decoder, checking the data costs more of decompression than before: zlib's
+CRC-32 runs at 2.77 GB/s, about a quarter of the time of gzip decompression, and Adler-32 at 5.5 GB/s (change 2)
+an eighth of zlib-format decompression. Both are fixed functions of the bytes, so faster code changes nothing else.
+
+**CRC-32.** Carry-less multiplication (PCLMULQDQ) folds the data into a 128-bit remainder, as in Intel's "Fast CRC
+Computation for Generic Polynomials Using PCLMULQDQ Instruction": four 16-byte lanes are each folded 64 bytes ahead
+with the constants x^544 and x^480 modulo the polynomial, then into one lane, then 16 bytes at a time, and a
+Barrett reduction gives the 32-bit CRC. Inputs of 64 bytes or more take this path; the last 0 to 15 bytes and short
+inputs take zlib's braided code. 15.3 GB/s instead of 2.77.
+
+**Adler-32.** AVX2 adds 32 bytes per step: `vpsadbw` sums the bytes into `a`, and `vpmaddubsw` with the weights
+32 to 1 into `sum`, with `a` from the steps before added 32 times by a running sum of the lanes. The lanes are
+added up and reduced modulo 65521 every 5536 bytes, the largest stretch whose sums fit 32 bits when every byte is
+255, including the 32-bit `unsigned long` of 64-bit Windows. 41 GB/s instead of 5.5.
+
+**Why opt-in.** Without run-time CPU detection, which zlib-turbo does not do, a library built with these
+instructions fails on processors without them. Distributions build for a baseline that lacks AVX2; people who build
+for their own machines, or for x86-64-v3, can turn them on. The default build stays plain C.
+
+**What it gives.** Decompression, level 6 streams in one call: gzip +20% to +28%, zlib +11% to +16% over zlib-turbo
+without SIMD, and +91% to +114% over zlib 1.3.2. Compression gains 1% to 5%, most at level 1 with gzip. Table in
+the [README](../README.md#simd-checksums-optional).
+
 ## What was tried and dropped
 
 Each was kept only if it was faster (for levels 10 to 12: smaller) without being worse elsewhere.
@@ -355,8 +383,9 @@ every one of these decisions, so its output stays byte-identical at levels 0 to 
 that of levels 10 to 12, which zlib does not have; a faster but different compressor could come later only as such
 an option, never as the default.
 
-**SIMD code, assembly and run-time CPU detection.** zlib-turbo has none of them. They would make the code larger,
-harder to review and harder to port, which is the opposite of what a drop-in zlib needs. The only
+**SIMD code, assembly and run-time CPU detection.** The default build has none of them; the SIMD checksums
+(change 9) come only when the build asks for them, and nothing detects the CPU at run time. More of it would make
+the code larger, harder to review and harder to port, which is the opposite of what a drop-in zlib needs. The only
 compiler-specific code is the count-trailing-zeros call in change 3, and it has a portable fallback. Compilers
 targeting newer CPUs generate better code from the same source anyway: built with `-march=x86-64-v3` (AVX2, BMI2),
 zlib-turbo decompresses another 2.5% to 5.7% faster, and compresses within 1% as fast.
