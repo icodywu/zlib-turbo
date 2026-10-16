@@ -598,6 +598,101 @@ uLong ZEXPORT crc32_z(uLong crc, const unsigned char FAR *buf, z_size_t len) {
 
 #else
 
+/* =========================================================================
+ * zlib-turbo: with -DZ_TURBO_SIMD, on x86 processors with the PCLMULQDQ
+ * instruction, fold sixteen bytes at a time by carry-less multiplication, as
+ * in Intel's "Fast CRC Computation for Generic Polynomials Using PCLMULQDQ
+ * Instruction". The instruction must be enabled for the compiler (-mpclmul,
+ * -march=westmere or later, or /arch:AVX2 with MSVC); there is no check at run
+ * time. The CRC is the same; only the speed differs.
+ */
+#if defined(Z_TURBO_SIMD) && ((defined(__PCLMUL__) && defined(__SSE2__)) || \
+    (defined(_MSC_VER) && defined(__AVX2__)))
+#  define Z_TURBO_CLMUL
+#  include <emmintrin.h>
+#  include <wmmintrin.h>
+
+/* Return the pre-conditioned CRC crc updated with the len bytes at buf, where
+   len is a multiple of 16 and at least 64. The constants are x^n modulo the
+   CRC-32 polynomial, bit-reflected and shifted left one bit, for the n given,
+   and for the Barrett reduction the polynomial P' and u' = x^64 / P. */
+local z_crc_t crc32_clmul(z_crc_t crc, const unsigned char FAR *buf,
+                          z_size_t len) {
+    __m128i x0, x1, x2, x3, y0, y1, y2, y3, k, t;
+    const __m128i mask32 = _mm_set_epi32(0, 0, 0, -1);
+
+    /* four lanes of sixteen bytes, the CRC added to the first */
+    x0 = _mm_loadu_si128((const __m128i *)buf);
+    x1 = _mm_loadu_si128((const __m128i *)(buf + 16));
+    x2 = _mm_loadu_si128((const __m128i *)(buf + 32));
+    x3 = _mm_loadu_si128((const __m128i *)(buf + 48));
+    x0 = _mm_xor_si128(x0, _mm_cvtsi32_si128((int)crc));
+    buf += 64;
+    len -= 64;
+
+    /* fold each lane 64 bytes ahead: x^544 and x^480 */
+    k = _mm_set_epi64x(0x1c6e41596LL, 0x154442bd4LL);
+    while (len >= 64) {
+        y0 = _mm_clmulepi64_si128(x0, k, 0x00);
+        y1 = _mm_clmulepi64_si128(x1, k, 0x00);
+        y2 = _mm_clmulepi64_si128(x2, k, 0x00);
+        y3 = _mm_clmulepi64_si128(x3, k, 0x00);
+        x0 = _mm_clmulepi64_si128(x0, k, 0x11);
+        x1 = _mm_clmulepi64_si128(x1, k, 0x11);
+        x2 = _mm_clmulepi64_si128(x2, k, 0x11);
+        x3 = _mm_clmulepi64_si128(x3, k, 0x11);
+        x0 = _mm_xor_si128(_mm_xor_si128(x0, y0),
+                           _mm_loadu_si128((const __m128i *)buf));
+        x1 = _mm_xor_si128(_mm_xor_si128(x1, y1),
+                           _mm_loadu_si128((const __m128i *)(buf + 16)));
+        x2 = _mm_xor_si128(_mm_xor_si128(x2, y2),
+                           _mm_loadu_si128((const __m128i *)(buf + 32)));
+        x3 = _mm_xor_si128(_mm_xor_si128(x3, y3),
+                           _mm_loadu_si128((const __m128i *)(buf + 48)));
+        buf += 64;
+        len -= 64;
+    }
+
+    /* fold the lanes into one, then the rest 16 bytes at a time: x^160 and
+       x^96 */
+    k = _mm_set_epi64x(0x0ccaa009eLL, 0x1751997d0LL);
+    y0 = _mm_clmulepi64_si128(x0, k, 0x00);
+    x0 = _mm_clmulepi64_si128(x0, k, 0x11);
+    x0 = _mm_xor_si128(_mm_xor_si128(x0, y0), x1);
+    y0 = _mm_clmulepi64_si128(x0, k, 0x00);
+    x0 = _mm_clmulepi64_si128(x0, k, 0x11);
+    x0 = _mm_xor_si128(_mm_xor_si128(x0, y0), x2);
+    y0 = _mm_clmulepi64_si128(x0, k, 0x00);
+    x0 = _mm_clmulepi64_si128(x0, k, 0x11);
+    x0 = _mm_xor_si128(_mm_xor_si128(x0, y0), x3);
+    while (len >= 16) {
+        y0 = _mm_clmulepi64_si128(x0, k, 0x00);
+        x0 = _mm_clmulepi64_si128(x0, k, 0x11);
+        x0 = _mm_xor_si128(_mm_xor_si128(x0, y0),
+                           _mm_loadu_si128((const __m128i *)buf));
+        buf += 16;
+        len -= 16;
+    }
+
+    /* 128 to 64 bits, with 32 zero bits appended (x^96), then 96 to 64 bits
+       (x^64) */
+    t = _mm_clmulepi64_si128(x0, k, 0x10);
+    x0 = _mm_xor_si128(_mm_srli_si128(x0, 8), t);
+    k = _mm_set_epi64x(0, 0x163cd6124LL);
+    t = _mm_srli_si128(x0, 4);
+    x0 = _mm_clmulepi64_si128(_mm_and_si128(x0, mask32), k, 0x00);
+    x0 = _mm_xor_si128(x0, t);
+
+    /* Barrett reduction to 32 bits */
+    k = _mm_set_epi64x(0x1f7011641LL, 0x1db710641LL);
+    t = x0;
+    x0 = _mm_clmulepi64_si128(_mm_and_si128(x0, mask32), k, 0x10);
+    x0 = _mm_clmulepi64_si128(_mm_and_si128(x0, mask32), k, 0x00);
+    x0 = _mm_xor_si128(x0, t);
+    return (z_crc_t)(unsigned)_mm_cvtsi128_si32(_mm_srli_si128(x0, 4));
+}
+#endif
+
 #ifdef W
 
 /*
@@ -633,6 +728,17 @@ uLong ZEXPORT crc32_z(uLong crc, const unsigned char FAR *buf, z_size_t len) {
 
     /* Pre-condition the CRC */
     crc = (~crc) & 0xffffffff;
+
+#ifdef Z_TURBO_CLMUL
+    /* All but the last 0..15 bytes by carry-less multiplication. */
+    if (len >= 64) {
+        z_size_t n = len & ~(z_size_t)15;
+
+        crc = crc32_clmul((z_crc_t)crc, buf, n);
+        buf += n;
+        len -= n;
+    }
+#endif
 
 #ifdef W
 

@@ -88,6 +88,67 @@ local Z_U8 load64le(const Bytef *p) {
 }
 #endif
 
+/* zlib-turbo: with -DZ_TURBO_SIMD and a compiler target with AVX2 (-mavx2,
+   -march=haswell or x86-64-v3 or later, or /arch:AVX2 with MSVC), thirty-two
+   bytes at a time. There is no check at run time. */
+#if defined(Z_TURBO_SIMD) && defined(__AVX2__)
+#  define Z_TURBO_ADLER_AVX2
+#  include <immintrin.h>
+
+/* Update the sums *a and *s, each less than BASE, with the len bytes at buf,
+   len a multiple of 32, and leave them less than BASE. For each block of 32
+   bytes b[0..31], a grows by the sum of the bytes and s by 32 times a before
+   the block plus the sum of (32 - i) b[i]. The vector sums are reduced every
+   5536 bytes, at most NMAX, so no 32-bit lane overflows. */
+local void adler32_avx2(unsigned long *a, unsigned long *s, const Bytef *buf,
+                        z_size_t len) {
+    const __m256i zero = _mm256_setzero_si256();
+    const __m256i ones = _mm256_set1_epi16(1);
+    const __m256i taps = _mm256_setr_epi8(32, 31, 30, 29, 28, 27, 26, 25,
+                                          24, 23, 22, 21, 20, 19, 18, 17,
+                                          16, 15, 14, 13, 12, 11, 10, 9,
+                                          8, 7, 6, 5, 4, 3, 2, 1);
+    unsigned long adler = *a, sum2 = *s;
+
+    while (len) {
+        z_size_t k = len < (NMAX / 32) * 32 ? len : (NMAX / 32) * 32;
+        __m256i va = zero, vp = zero, vs = zero, v;
+        __m128i t;
+
+        len -= k;
+        k /= 32;
+        sum2 = (sum2 + 32 * adler * (unsigned long)k) % BASE;
+        /* below, s gains at most 3.93e9 (all bytes 255): with sum2 reduced
+           first, that fits 32 bits, as unsigned long is on 64-bit Windows */
+        do {
+            v = _mm256_loadu_si256((const __m256i *)buf);
+            vp = _mm256_add_epi32(vp, va);      /* sum of a before each block */
+            va = _mm256_add_epi32(va, _mm256_sad_epu8(v, zero));
+            vs = _mm256_add_epi32(vs, _mm256_madd_epi16(
+                     _mm256_maddubs_epi16(v, taps), ones));
+            buf += 32;
+        } while (--k);
+        vs = _mm256_add_epi32(vs, _mm256_slli_epi32(vp, 5));
+
+        /* add up the eight lanes of each */
+        t = _mm_add_epi32(_mm256_castsi256_si128(va),
+                          _mm256_extracti128_si256(va, 1));
+        t = _mm_add_epi32(t, _mm_shuffle_epi32(t, 0x4e));
+        t = _mm_add_epi32(t, _mm_shuffle_epi32(t, 0xb1));
+        adler += (unsigned long)(unsigned)_mm_cvtsi128_si32(t);
+        t = _mm_add_epi32(_mm256_castsi256_si128(vs),
+                          _mm256_extracti128_si256(vs, 1));
+        t = _mm_add_epi32(t, _mm_shuffle_epi32(t, 0x4e));
+        t = _mm_add_epi32(t, _mm_shuffle_epi32(t, 0xb1));
+        sum2 += (unsigned long)(unsigned)_mm_cvtsi128_si32(t);
+        adler %= BASE;
+        sum2 %= BASE;
+    }
+    *a = adler;
+    *s = sum2;
+}
+#endif
+
 /* ========================================================================= */
 uLong ZEXPORT adler32_z(uLong adler, const Bytef *buf, z_size_t len) {
     unsigned long sum2;
@@ -113,6 +174,17 @@ uLong ZEXPORT adler32_z(uLong adler, const Bytef *buf, z_size_t len) {
     /* initial Adler-32 value (deferred check for len == 1 speed) */
     if (buf == Z_NULL)
         return 1L;
+
+#ifdef Z_TURBO_ADLER_AVX2
+    /* all but the last 0..31 bytes with AVX2, the rest below */
+    if (len >= 64) {
+        z_size_t n = len & ~(z_size_t)31;
+
+        adler32_avx2(&adler, &sum2, buf, n);
+        buf += n;
+        len -= n;
+    }
+#endif
 
     /* in case short lengths are provided, keep it somewhat fast */
     if (len < 16) {
