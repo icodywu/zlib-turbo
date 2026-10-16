@@ -274,9 +274,49 @@ calling thread is now the limit at about 220 MB/s, spending its time choosing ma
 thread can do ahead. At level 9 on Silesia the workers are the limit, as long chains there take many steps per
 position.
 
+## 8. Levels 10 to 12
+
+*`deflate.c` (`deflate_opt()` and the `opt_` functions), `zturbo.h`*
+
+These levels are the one place where zlib-turbo decides what to output, so they do not follow the rule above: no
+zlib level gives their output to match. They are chosen only by asking for a level above 9, and they share nothing
+with levels 0 to 9 but the stream wrappers, the flushes and the bit writer's state.
+
+**Segments.** The input is kept until 256 KiB have come (or a flush), then parsed as a segment, with the 32 KiB
+before it as the window. Segments end only every 256 KiB and at flushes, so the output does not depend on how the
+input is fed. The levels write into an output buffer of their own, made `pending_buf` while they run, which holds
+a whole segment's blocks; zlib's flushes, wrappers, `deflatePending()` and `deflateCopy()` then work unchanged.
+
+**Matches.** A binary tree of the window's strings, ordered from four-byte hashes as in libdeflate, gives at each
+position the longest match within a search depth (24, 64 and 256 nodes at levels 10, 11 and 12) and on the way the
+nearest match of each shorter length. A table of three-byte hashes adds the nearest three-byte match. All of them
+are kept for the segment, a few per position. The tree and the tables persist from segment to segment: they hold
+positions plus a base that grows as the window moves, so that entries older than the window read as empty without
+clearing anything, and a position enters the tree only once 258 bytes follow it.
+
+**Parse.** For given bit costs of every literal, length and distance code, a pass from the end of the segment to
+the start finds the cheapest way to every position, trying each match at every length up to its own. The first
+costs are the entropies of a lazy parse's symbols (zlib's: a match is dropped when the next position has a longer
+one, and three-byte matches farther than 4 KiB are not taken); the parse then runs once more with the entropies of
+its own result.
+
+**Blocks.** The symbols are split into blocks by dynamic programming over up to 256 candidate boundaries, each
+block costed as the entropy of its symbol counts plus an estimate of its header. Each block is then parsed again
+with the bit lengths of its own Huffman codes, which are exact costs, until the block no longer gets smaller (up to
+2, 4 and 8 times); level 12 then splits and reparses once more. Adjacent blocks merge when one block is smaller. Each
+block is written with the smallest of a dynamic, a fixed and a stored block, and the whole segment is stored when
+that is smaller still, which keeps `deflateBound()` true. Code lengths come from package-merge, optimal within the
+15-bit (and, for the code length code, 7-bit) limits; the code lengths are run-length coded by dynamic programming
+with the code length code's own costs, three rounds.
+
+**What it gives.** On Silesia, enwik8 and Canterbury + Calgary, level 12 is 0.15% to 0.33% smaller than libdeflate
+1.26 at its level 12, and 4.0% to 5.7% smaller than zlib's level 9, at about 3 MB/s, half of libdeflate's speed. It
+is 0.2% smaller than Zopfli on Silesia and 0.1% to 0.2% larger on the other two, 6 to 11 times as fast. Level 10, at
+5.5 MB/s, is as small as libdeflate's level 12 on Silesia. Table in the [README](../README.md#levels-10-to-12).
+
 ## What was tried and dropped
 
-Each was kept only if it was faster without being slower elsewhere.
+Each was kept only if it was faster (for levels 10 to 12: smaller) without being worse elsewhere.
 
 | Idea | Where it comes from | Result |
 |---|---|---|
@@ -293,6 +333,11 @@ Each was kept only if it was faster without being slower elsewhere.
 | Clear only the hash slots a small stream used, in `deflateReset()` | | clearing takes 0.6 µs of the 4 to 9 µs a message of 64 to 256 bytes costs; not worth the code |
 | Threads: search every position for every possible match to beat, instead of following the parse | | 1.8 MB/s at level 9 with two threads, far below one thread: most of the work is for positions the parse skips |
 | Threads: 32-bit chain links instead of 16-bit distances | | the same speed at 8 and 16 threads, 3% to 8% slower at 4, twice the memory |
+| Levels 10 to 12: first costs from a greedy parse (longest match everywhere) | | 1.5% larger on mr and 0.8% on reymont: the parse keeps the greedy parse's habits |
+| Levels 10 to 12: a 15-bit three-byte hash table | libdeflate | 0.7% larger on x-ray: two strings in one slot lose three-byte matches; 20 bits |
+| Levels 10 to 12: entropy costs in the block passes, and no stop when a pass does not help | Zopfli | 0.01% smaller, 1.2 to 1.9 times the time |
+| Levels 10 to 12: deeper search, more passes, finer block boundaries, 1 MiB segments | | each within 0.05% on mr, x-ray and reymont |
+| Levels 10 to 12: the tree and the hash tables rebuilt for each segment | | the same sizes; a flush every few bytes cost a 4 MB clear and 32K insertions each |
 
 Compression and decompression speed on Silesia, Canterbury + Calgary and enwik8 as above, each against the version
 kept.
@@ -306,8 +351,9 @@ kept.
 - lazy matching, block splitting and the level parameters.
 
 That is how zlib-ng compresses two to three times as fast, with output that differs from zlib's. zlib-turbo keeps
-every one of these decisions, so its output stays byte-identical. A faster but different compressor could come
-later as an option chosen at build time, never as the default.
+every one of these decisions, so its output stays byte-identical at levels 0 to 9. The only different output is
+that of levels 10 to 12, which zlib does not have; a faster but different compressor could come later only as such
+an option, never as the default.
 
 **SIMD code, assembly and run-time CPU detection.** zlib-turbo has none of them. They would make the code larger,
 harder to review and harder to port, which is the opposite of what a drop-in zlib needs. The only

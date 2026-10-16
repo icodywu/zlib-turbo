@@ -13,7 +13,10 @@ Changes in zlib-turbo 1.0.0, an altered version of zlib 1.3.2 (see NOTICE)
 - Multithreaded compression at levels 4 to 9 with the same output:
   deflateSetThreads() in zturbo.h; configure --no-threads, CMake option
   ZLIB_TURBO_THREADS
-- Compressed output, return values and decompressed results unchanged
+- Levels 10 to 12: an optimal-parsing compressor of its own, smaller than
+  level 9; its output is valid deflate data, but not zlib's
+- Compressed output at levels 0 to 9, return values and decompressed results
+  unchanged
 - Tests and benchmarks against zlib in turbo/
 
 Changes in 1.3.2 (17 Feb 2026)

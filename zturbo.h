@@ -28,7 +28,7 @@ ZEXTERN const char * ZEXPORT zlibTurboVersion(void);
      Levels 10 to 12
 
      deflateInit(), deflateInit2(), deflateParams() and compress2() also take
-   levels 10, 11 and 12, which compress smaller than level 9 (by 4% to 5% on
+   levels 10, 11 and 12, which compress smaller than level 9 (by 4% to 6% on
    typical data) and more slowly. They are a compressor of their own, with an
    optimal parse: their output is not zlib's (no zlib level has it), but it is
    valid deflate data that every inflater decompresses, the same for the same

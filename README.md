@@ -3,28 +3,30 @@
 **zlib, faster, and byte for byte the same.**
 
 zlib-turbo is zlib 1.3.2 with faster decompression and compression. It has the same API, the same ABI and the
-same headers (`zlib.h` is unchanged), and it produces the same compressed bytes as zlib for every input and every
-setting. It decompresses every stream, valid or damaged, with the same output and the same errors. You can put it
-in place of zlib in a program, a package or a whole system, and nothing else changes except the speed.
+same headers (`zlib.h` is unchanged), and it produces the same compressed bytes as zlib for every input at every
+setting zlib has. It decompresses every stream, valid or damaged, with the same output and the same errors. You can
+put it in place of zlib in a program, a package or a whole system, and nothing else changes except the speed.
 
-| One core, AMD EPYC 9334, GCC 14 -O2 | zlib 1.3.2 | zlib-turbo | |
+| AMD EPYC 9334, GCC 14 -O2, one core unless noted | zlib 1.3.2 | zlib-turbo | |
 |---|---:|---:|---:|
 | Decompression, Silesia (level 6 streams) | 438 MB/s | 739 MB/s | **+69%** |
 | Decompression, enwik8 (level 6 streams) | 349 MB/s | 621 MB/s | **+78%** |
 | Compression, Silesia, level 1 | 114 MB/s | 151 MB/s | **+32%** |
 | Compression, Silesia, level 6 | 31.9 MB/s | 36.0 MB/s | **+13%** |
 | Compression, Silesia, level 6, 16 threads | 31.9 MB/s | 218 MB/s | **6.8×** |
-| Compressed output | | | **identical** |
+| Smallest output, Silesia (zlib level 9, zlib-turbo level 12) | 67.64 MB | 64.58 MB | **-4.5%** |
+| Compressed output, levels 0 to 9 | | | **identical** |
 
-zlib-turbo also adds two optional features: multithreaded compression, with output still identical to zlib's, and
+zlib-turbo also adds three optional features: multithreaded compression, with output still identical to zlib's;
 prepared dictionaries, which make compressing many small messages with a dictionary up to four times as fast (see
-below). Programs that do not use them see plain zlib.
+below); and levels 10 to 12, which compress smaller than level 9 with an optimal parse (their output is valid
+deflate data but not zlib's, since no zlib level has it). Programs that do not use them see plain zlib.
 
 ## Why the same bytes matter
 
-Faster zlib-compatible libraries exist; [zlib-ng](https://github.com/zlib-ng/zlib-ng) is the best known, and it is
-faster than zlib-turbo. But they compress differently: the output is valid, yet not the bytes zlib would write. That
-breaks anything that hashes or compares compressed data:
+Faster zlib-compatible libraries exist; [zlib-ng](https://github.com/zlib-ng/zlib-ng) is the best known, and on one
+core it is faster than zlib-turbo. But they compress differently: the output is valid, yet not the bytes zlib
+would write. That breaks anything that hashes or compares compressed data:
 
 - In January 2023, a change of compressor in git made the source archives that GitHub serves differ by a few bytes.
   Every published checksum stopped matching, and builds that verify downloads broke across Homebrew, Bazel and many
@@ -69,7 +71,7 @@ different output; at level 1 its files are 18% to 22% larger than zlib's. All ru
 
 ## What changed
 
-Seven changes to zlib 1.3.2, each its own commit:
+Eight changes to zlib 1.3.2:
 
 1. **Decompression: a 64-bit bit buffer and wide copies** (`inffast.c`). A new fast loop refills a 64-bit bit
    buffer eight bytes at a time, once per length/distance pair or per up to three literals, and copies matches 16
@@ -83,6 +85,9 @@ Seven changes to zlib 1.3.2, each its own commit:
 5. **Hash tables slid eight entries at a time** (`deflate.c`), so that compilers vectorize it.
 6. **Prepared dictionaries** (`deflate.c`, new header `zturbo.h`), below.
 7. **Multithreaded compression** (`deflate.c`, `trees.c`, `zturbo.h`), below.
+8. **Levels 10 to 12** (`deflate.c`, `zturbo.h`), below: a compressor of their own with an optimal parse, 4% to 6%
+   smaller than level 9 and smaller than libdeflate's level 12, and slower. Their output is not zlib's; levels 0 to
+   9 are unchanged.
 
 How each change works, why the output stays the same, what each one gains, and what was tried and dropped:
 [`turbo/TECHNIQUES.md`](turbo/TECHNIQUES.md).
@@ -163,6 +168,43 @@ These functions are declared in `zturbo.h`, not `zlib.h`, and exported under the
 (`ZLIB_TURBO_1.0`), so programs built for zlib see no difference. `zlibTurboVersion()` tells a program that it is
 running with zlib-turbo; `zlibVersion()` still returns the zlib version it is based on.
 
+## Levels 10 to 12
+
+Levels 10, 11 and 12 compress smaller than level 9, and smaller than libdeflate's level 12, at a few MB/s. They are
+a compressor of their own, so their output is not zlib's (no zlib level has it), but it is ordinary deflate data that
+every inflater decompresses, and it is the same for the same input, flushes and parameters, however the input is
+fed. Ask for them as for any level:
+
+```c
+deflateInit2(&strm, 12, Z_DEFLATED, 15, 8, Z_DEFAULT_STRATEGY);   /* or compress2(dest, &len, src, n, 12) */
+```
+
+| Raw deflate bytes, MB/s | Silesia | enwik8 | Canterbury + Calgary |
+|---|---:|---:|---:|
+| zlib level 9 | 67,643,201 · 14.2 | 36,475,786 · 20.7 | 1,783,551 · 8.4 |
+| libdeflate 1.26 level 9 | 66,715,085 · 35.8 | 36,244,245 · 39.2 | 1,739,956 · 27.4 |
+| libdeflate 1.26 level 12 | 64,681,628 · 6.5 | 35,103,237 · 8.5 | 1,688,340 · 6.3 |
+| Zopfli 1.0.3 (15 iterations) | 64,713,006 · 0.29 | **34,966,060** · 0.65 | **1,680,016** · 0.32 |
+| zlib-turbo level 10 | 64,681,882 · 5.5 | 35,016,775 · 5.6 | 1,687,697 · 5.5 |
+| zlib-turbo level 11 | 64,613,145 · 4.4 | 35,012,093 · 5.1 | 1,684,734 · 4.4 |
+| zlib-turbo level 12 | **64,584,749** · 3.2 | 35,007,174 · 3.9 | 1,682,786 · 3.1 |
+
+Each file compressed whole on one core of an AMD EPYC 9334, GCC 14 -O2, best time of two runs. Level 12 is 0.15%
+to 0.33% smaller than libdeflate's level 12, at half its speed, and 4.0% to 5.7% smaller than level 9. Against
+Zopfli it is 0.2% smaller on Silesia and 0.1% to 0.2% larger on the others, at 6 to 11 times its speed. Level 10
+is as small as libdeflate's level 12 on Silesia. All runs, per file:
+[`turbo/results/levels10-12_epyc9334.txt`](turbo/results/levels10-12_epyc9334.txt).
+
+How they work: the input is parsed 256 KiB at a time, with the 32 KiB before it. A binary tree of the window's
+strings gives every match at every position; a parse that finds the cheapest path for given bit costs runs
+several times, first with the costs of a lazy parse's statistics, then with each block's own Huffman codes; block
+boundaries come from dynamic programming over an entropy estimate, and each block is written dynamic, fixed or
+stored, whichever is smallest. Details: [`turbo/TECHNIQUES.md`](turbo/TECHNIQUES.md#8-levels-10-to-12).
+
+They take about 23 MB per stream and keep up to 256 KiB of input before they compress it (a flush compresses what
+is there). A stream can change among levels 10 to 12 at any time, but between them and levels 0 to 9 only before
+its first `deflate()` call. Threads do not speed them up yet. `Z_BEST_COMPRESSION` is still 9.
+
 ## How it was tested
 
 Every test compares zlib-turbo with unmodified zlib 1.3.2, not only with expected output.
@@ -177,7 +219,7 @@ Every test compares zlib-turbo with unmodified zlib 1.3.2, not only with expecte
 | Differential fuzzing | libFuzzer against zlib 1.3.2. Decompression: 36 million runs under AddressSanitizer and 35 million under UndefinedBehaviorSanitizer. Compression, with all flush modes, `deflateParams()`, dictionaries set or prepared, `deflatePrime()` and `deflateReset()`: 5.7 million runs under AddressSanitizer and 2.8 million under UndefinedBehaviorSanitizer. No difference and no report. |
 | Dictionaries | 9,315 combinations of level, window, `memLevel`, strategy and dictionary length per test file: the same results from zlib's `deflateSetDictionary()` and from zlib-turbo's `deflateSetDictionary()` and `deflateUseDictionary()`. |
 | Streaming | With `Z_SYNC_FLUSH`, every byte before a flush point comes out as soon as its compressed bytes are in (43,815 messages). |
-| Threads | Levels 4 to 9, 23 settings each (input and output in pieces down to one byte, sync and full flushes, `deflateParams()` to other levels, strategies and back, raw and zlib dictionaries, input moved and overwritten between calls) on 12 files, with 3 to 16 threads: every output byte and return code the same as with one thread, 1,656 cases per run, with assertions on. Also under ThreadSanitizer (clang and GCC), AddressSanitizer and UndefinedBehaviorSanitizer, on 32-bit x86, and with MSVC and Windows threads. |
+| Threads | Levels 4 to 9, 23 settings each (input and output in pieces down to one byte, sync and full flushes, `deflateParams()` to other levels, strategies and back, raw and zlib dictionaries, input moved and overwritten between calls) on 12 files, with 3 to 16 threads: every output byte and return code the same as with one thread, 1,656 cases in all, with assertions on. Also under ThreadSanitizer (clang and GCC), AddressSanitizer and UndefinedBehaviorSanitizer, on 32-bit x86, and with MSVC and Windows threads. |
 | zlib's own tests | `make test`, also in a `ZLIB_DEBUG` build; zlib's `test/infcover.c` with new cases for the fast loop. |
 
 ## Building and installing
@@ -199,6 +241,7 @@ sh turbo/bench/run_speed.sh zlib-1.3.2 . silesia/ > speed.txt && python3 turbo/b
 sh turbo/tests/run_stress.sh zlib-1.3.2 . inputs/         # damaged streams, under the sanitizers
 sh turbo/tests/run_dict.sh zlib-1.3.2 . silesia/xml      # prepared dictionaries
 sh turbo/tests/run_threads.sh . 8 silesia/*               # threads: the same bytes as one thread
+sh turbo/tests/run_opt.sh zlib-1.3.2 . silesia/*           # levels 10 to 12: round trips, also through zlib
 TIME=3600 sh turbo/tests/fuzz/run_fuzz.sh zlib-1.3.2 . inputs/          # decompression, differential
 TIME=3600 sh turbo/tests/fuzz/run_fuzz_deflate.sh zlib-1.3.2 . inputs/  # compression, differential
 ```
