@@ -1,0 +1,86 @@
+name: zlib-turbo
+# zlib-turbo against unmodified zlib 1.3.2: identical compressed output at levels 0 to 9, threads that change no
+# byte, prepared dictionaries, levels 10 to 12 that stock zlib decompresses, damaged streams, under the sanitizers
+# and with MSVC. zlib's own workflows build and test everything else.
+on: [push, pull_request, workflow_dispatch]
+permissions:
+  contents: read
+
+jobs:
+  same-as-zlib:
+    name: ${{ matrix.name }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: Ubuntu GCC
+            os: ubuntu-latest
+            cc: gcc
+          - name: Ubuntu Clang
+            os: ubuntu-latest
+            cc: clang
+          - name: macOS Clang
+            os: macos-latest
+            cc: clang
+    env:
+      CC: ${{ matrix.cc }}
+    steps:
+      - uses: actions/checkout@v6
+      - name: zlib 1.3.2 to compare with
+        run: git clone --quiet --depth 1 --branch v1.3.2 https://github.com/madler/zlib.git ../zlib-1.3.2
+      - name: Test inputs
+        run: |
+          python3 turbo/tests/make_inputs.py ci/synthetic README.md
+          python3 turbo/tests/make_ci_corpus.py ci/large
+      - name: Identical compressed output, levels 0 to 9
+        run: sh turbo/tests/run_compress.sh ../zlib-1.3.2 . ci/synthetic ci/large
+      - name: Threads give the same bytes as one thread
+        run: sh turbo/tests/run_threads.sh . 4 ci/large/text ci/large/records ci/synthetic/mixed
+      - name: Prepared dictionaries give what deflateSetDictionary() gives
+        run: sh turbo/tests/run_dict.sh ../zlib-1.3.2 . ci/large/text
+      - name: Levels 10 to 12 decompress, also with stock zlib
+        run: sh turbo/tests/run_opt.sh ../zlib-1.3.2 . ci/synthetic/mixed ci/synthetic/period7 ci/synthetic/random
+
+  sanitizers:
+    name: Ubuntu Clang sanitizers
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    env:
+      CC: clang
+    steps:
+      - uses: actions/checkout@v6
+      - name: zlib 1.3.2 to compare with
+        run: git clone --quiet --depth 1 --branch v1.3.2 https://github.com/madler/zlib.git ../zlib-1.3.2
+      - name: Test inputs
+        run: |
+          python3 turbo/tests/make_inputs.py ci/synthetic README.md
+          python3 turbo/tests/make_ci_corpus.py ci/large
+      - name: Threads under ThreadSanitizer
+        run: SAN=thread sh turbo/tests/run_threads.sh . 4 ci/large/text ci/synthetic/mixed
+      - name: Threads under AddressSanitizer and UndefinedBehaviorSanitizer
+        run: SAN=address,undefined sh turbo/tests/run_threads.sh . 3 ci/large/records ci/synthetic/mixed
+      - name: Damaged streams, the same results as zlib (AddressSanitizer, UndefinedBehaviorSanitizer)
+        run: sh turbo/tests/run_stress.sh ../zlib-1.3.2 . ci/synthetic
+      - name: Levels 10 to 12 under AddressSanitizer and UndefinedBehaviorSanitizer
+        run: SAN=address,undefined sh turbo/tests/run_opt.sh ../zlib-1.3.2 . ci/synthetic/mixed
+
+  msvc:
+    name: Windows MSVC, threads
+    runs-on: windows-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v6
+      - name: Test inputs
+        run: |
+          python turbo/tests/make_inputs.py ci/synthetic README.md
+          python turbo/tests/make_ci_corpus.py ci/large
+      - name: Build with Windows threads, /W4 /WX, and check threads give the same bytes
+        shell: cmd
+        run: |
+          for /f "usebackq tokens=*" %%i in (`"%ProgramFiles(x86)%\Microsoft Visual Studio\Installer\vswhere.exe" -latest -property installationPath`) do call "%%i\VC\Auxiliary\Build\vcvars64.bat"
+          mkdir obj
+          cl /nologo /c /O2 /W4 /WX /DZ_TURBO_THREADS /D_CRT_SECURE_NO_WARNINGS /Foobj\ adler32.c compress.c crc32.c deflate.c infback.c inffast.c inflate.c inftrees.c trees.c uncompr.c zutil.c || exit /b 1
+          cl /nologo /O2 /D_CRT_SECURE_NO_WARNINGS /I. turbo\tests\zmt.c obj\*.obj /Fezmt.exe || exit /b 1
+          .\zmt.exe check 4 ci\large\text ci\large\records ci\synthetic\mixed

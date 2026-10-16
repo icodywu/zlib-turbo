@@ -80,7 +80,7 @@ jobs:
           ninja
     - name: Configure
       run: |
-        cmake /cygdrive/d/a/zlib/zlib \
+        cmake /cygdrive/d/a/zlib-turbo/zlib-turbo \
           -B build \
           -DCMAKE_BUILD_TYPE=Release \
           -DZLIB_BUILD_MINIZIP=ON \
