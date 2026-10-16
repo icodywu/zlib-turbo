@@ -66,6 +66,40 @@ jobs:
       - name: Levels 10 to 12 under AddressSanitizer and UndefinedBehaviorSanitizer
         run: SAN=address,undefined sh turbo/tests/run_opt.sh ../zlib-1.3.2 . ci/synthetic/mixed
 
+  simd:
+    name: Ubuntu GCC, SIMD checksums
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    env:
+      CC: gcc
+    steps:
+      - uses: actions/checkout@v6
+      - name: zlib 1.3.2 to compare with
+        run: git clone --quiet --depth 1 --branch v1.3.2 https://github.com/madler/zlib.git ../zlib-1.3.2
+      - name: Test inputs
+        run: |
+          python3 turbo/tests/make_inputs.py ci/synthetic README.md
+          python3 turbo/tests/make_ci_corpus.py ci/large
+      - name: CRC-32 and Adler-32 with PCLMULQDQ and AVX2 give the scalar code's results
+        run: |
+          gcc -O2 -DZ_TURBO_SIMD -march=x86-64-v3 -mpclmul -I. adler32.c crc32.c zutil.c turbo/tests/zsum.c -o zsum
+          objdump -d zsum | grep -q pclmul
+          ./zsum check
+          ./zsum speed
+      - name: Identical compressed output with SIMD, levels 0 to 9
+        run: CFLAGS="-O2 -DZ_TURBO_SIMD -march=x86-64-v3 -mpclmul" sh turbo/tests/run_compress.sh ../zlib-1.3.2 . ci/synthetic ci/large
+      - name: configure --simd, make test
+        run: |
+          mkdir build-simd && cd build-simd
+          ../configure --simd
+          make -j4 test
+          objdump -d libz.so | grep -q pclmul
+      - name: CMake ZLIB_TURBO_SIMD, ctest
+        run: |
+          cmake -S . -B build-cmake -DCMAKE_BUILD_TYPE=Release -DZLIB_TURBO_SIMD=ON
+          cmake --build build-cmake -j4
+          cd build-cmake && ctest --output-on-failure -E 'find_package|add_subdirectory|coverage'
+
   msvc:
     name: Windows MSVC, threads
     runs-on: windows-latest
@@ -84,3 +118,11 @@ jobs:
           cl /nologo /c /O2 /W4 /WX /DZ_TURBO_THREADS /D_CRT_SECURE_NO_WARNINGS /Foobj\ adler32.c compress.c crc32.c deflate.c infback.c inffast.c inflate.c inftrees.c trees.c uncompr.c zutil.c || exit /b 1
           cl /nologo /O2 /D_CRT_SECURE_NO_WARNINGS /I. turbo\tests\zmt.c obj\*.obj /Fezmt.exe || exit /b 1
           .\zmt.exe check 4 ci\large\text ci\large\records ci\synthetic\mixed
+      - name: SIMD checksums with /arch:AVX2, /W4 /WX, against the scalar code
+        shell: cmd
+        run: |
+          for /f "usebackq tokens=*" %%i in (`"%ProgramFiles(x86)%\Microsoft Visual Studio\Installer\vswhere.exe" -latest -property installationPath`) do call "%%i\VC\Auxiliary\Build\vcvars64.bat"
+          mkdir objs
+          cl /nologo /c /O2 /W4 /WX /arch:AVX2 /DZ_TURBO_SIMD /D_CRT_SECURE_NO_WARNINGS /Foobjs\ adler32.c crc32.c zutil.c || exit /b 1
+          cl /nologo /O2 /D_CRT_SECURE_NO_WARNINGS /I. turbo\tests\zsum.c objs\*.obj /Fezsum.exe || exit /b 1
+          .\zsum.exe check
