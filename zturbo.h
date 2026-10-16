@@ -33,7 +33,7 @@ ZEXTERN const char * ZEXPORT zlibTurboVersion(void);
    optimal parse: their output is not zlib's (no zlib level has it), but it is
    valid deflate data that every inflater decompresses, the same for the same
    input, flushes and parameters, however the input is fed. They take about
-   23 MB per stream, and keep up to 256 KB of input before they compress it;
+   24 MB per stream, and keep up to 256 KB of input before they compress it;
    flushes work as at other levels. Z_FIXED gives fixed codes only, and
    Z_HUFFMAN_ONLY and Z_RLE work as at other levels. A stream may change
    among levels 10 to 12 at any time, but between them and levels 0 to 9 only

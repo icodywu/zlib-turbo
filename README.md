@@ -201,7 +201,7 @@ several times, first with the costs of a lazy parse's statistics, then with each
 boundaries come from dynamic programming over an entropy estimate, and each block is written dynamic, fixed or
 stored, whichever is smallest. Details: [`turbo/TECHNIQUES.md`](turbo/TECHNIQUES.md#8-levels-10-to-12).
 
-They take about 23 MB per stream and keep up to 256 KiB of input before they compress it (a flush compresses what
+They take about 24 MB per stream and keep up to 256 KiB of input before they compress it (a flush compresses what
 is there). A stream can change among levels 10 to 12 at any time, but between them and levels 0 to 9 only before
 its first `deflate()` call. Threads do not speed them up yet. `Z_BEST_COMPRESSION` is still 9.
 

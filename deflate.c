@@ -132,6 +132,8 @@ local void opt_dictionary(deflate_state *s, const Bytef *dict, uInt len);
 #define OPT_H3_BITS 20          /* hash of three bytes: rarely two in a slot */
 #define OPT_UNSEEN 15           /* bits of a symbol the codes do not have */
 #define OPT_GMIN 512            /* fewest symbols between candidate boundaries */
+#define OPT_TINY 64             /* segments shorter: one parse, no passes */
+#define OPT_SLACK (OPT_SEG >> 2) /* room in in[] for the window to move up */
 #define OPT_LL 286              /* literal/length codes */
 #define OPT_BIG 0xffffffffU
 
@@ -4337,6 +4339,17 @@ local unsigned opt_segment(deflate_state *s, opt_state *o, unsigned end,
             opt_stored(s, o, start, end, last);
         goto done;
     }
+    if (n < OPT_TINY) {                 /* a few bytes, as between flushes:
+                                           one parse, for fixed codes */
+        opt_costs_fixed(o);
+        ns = opt_parse(o, start, end);
+        bits = opt_bits(o, o->tmp, ns, &o->t, &fixed);
+        if (OPT_STORED_BITS(n) < bits)
+            opt_stored(s, o, start, end, last);
+        else
+            opt_write(s, o, o->tmp, ns, &o->t, fixed, last);
+        goto done;
+    }
 
     /* first costs: the statistics of a lazy parse, as zlib's */
     for (i = 0, ns = 0; i < n; ns++) {
@@ -4479,8 +4492,9 @@ local int opt_alloc(z_streamp strm, deflate_state *s) {
         return Z_MEM_ERROR;
     zmemzero(o, sizeof(opt_state));
     s->opt = o;
-    o->in = (Bytef *)ZALLOC(strm, win + OPT_SEG + 8, 1);
-    o->child = (unsigned *)ZALLOC(strm, 2 * (win + OPT_SEG), sizeof(unsigned));
+    o->in = (Bytef *)ZALLOC(strm, win + OPT_SLACK + OPT_SEG + 8, 1);
+    o->child = (unsigned *)ZALLOC(strm, 2 * (win + OPT_SLACK + OPT_SEG),
+                                   sizeof(unsigned));
     o->h4 = (unsigned *)ZALLOC(strm, 1U << OPT_H4_BITS, sizeof(unsigned));
     o->h3 = (unsigned *)ZALLOC(strm, 1U << OPT_H3_BITS, sizeof(unsigned));
     o->off = (unsigned *)ZALLOC(strm, OPT_SEG + 1, sizeof(unsigned));
@@ -4554,9 +4568,11 @@ local void opt_free(z_streamp strm, deflate_state *s) {
     s->opt = Z_NULL;
 }
 
-/* Keep the last w_size bytes before in[o->start] as the window. */
+/* Keep the last w_size bytes before in[o->start] as the window, moving them
+   down once the window has moved OPT_SLACK bytes up. */
 local void opt_keep(deflate_state *s, opt_state *o) {
-    unsigned from = o->start > s->w_size ? o->start - s->w_size : 0;
+    unsigned from = o->start > s->w_size + OPT_SLACK ?
+                    o->start - s->w_size : 0;
 
     unsigned i;
 
