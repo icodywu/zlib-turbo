@@ -117,9 +117,9 @@ which reaches 82% to 86% of its speed without any SIMD code (the default build).
 different output; at level 1 its files are 18% to 22% larger than zlib's. All runs:
 [`turbo/results/speed_epyc9334.txt`](turbo/results/speed_epyc9334.txt).
 
-zlib-turbo is also in [TurboBench](https://github.com/powturbo/TurboBench), which measures it with zlib, zlib-ng,
-libdeflate and many other codecs on several platforms: see its
-[benchmarks](https://github.com/powturbo/TurboBench/blob/master/benchmark.md).
+zlib-turbo is also in [lzbench](https://github.com/inikep/lzbench) and [TurboBench](https://github.com/powturbo/TurboBench),
+which measure it with zlib, zlib-ng, libdeflate and many other codecs; TurboBench publishes
+[results](https://github.com/powturbo/TurboBench/blob/master/benchmark.md) for several platforms.
 
 ## What changed
 
