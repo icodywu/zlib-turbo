@@ -17,8 +17,8 @@ extern "C" {
 #endif
 
 #define ZLIB_TURBO 1
-#define ZLIB_TURBO_VERSION "1.0.0"
-#define ZLIB_TURBO_VERNUM 0x1000   /* 0xMmp0: major, minor, patch, as ZLIB_VERNUM */
+#define ZLIB_TURBO_VERSION "1.0.1"
+#define ZLIB_TURBO_VERNUM 0x1010   /* 0xMmp0: major, minor, patch, as ZLIB_VERNUM */
 
 ZEXTERN const char * ZEXPORT zlibTurboVersion(void);
 /*
@@ -62,9 +62,14 @@ ZEXTERN const char * ZEXPORT zlibTurboVersion(void);
 
 ZEXTERN int ZEXPORT deflateSetThreads(z_streamp strm, int threads);
 /*
-     Starts threads worker threads for strm, after deflateInit() or
-   deflateInit2() and before or between calls of deflate(). 0 or 1 stops them,
-   as deflateEnd() does; deflateReset() keeps them, and deflateCopy() makes a
+     Lets strm use up to threads threads: the calling thread and threads - 1
+   worker threads. A single worker cannot search far enough ahead of the parse
+   to gain, so with 2, as with 0 or 1, the stream stays on one thread. The
+   workers start at the first call of deflate() that can use them (levels 4 to
+   9, not Z_HUFFMAN_ONLY or Z_RLE), so a stream at other levels takes none.
+   deflateSetThreads() may be called after deflateInit() or deflateInit2(),
+   and before or between calls of deflate(); 2 or less stops the workers, as
+   deflateEnd() does. deflateReset() keeps them, and deflateCopy() makes a
    copy that runs without them. Each worker takes about 4 MB.
 
      The workers read ahead in the input. So when deflate() returns with input
@@ -72,11 +77,14 @@ ZEXTERN int ZEXPORT deflateSetThreads(z_streamp strm, int threads);
    were left, though they may be at another address: once deflate() returns,
    the workers no longer read next_in.
 
-     Returns Z_OK; Z_STREAM_ERROR if strm is not valid, threads is negative or
-   more than 256, or threads is more than 1 and the library was built without
-   threads (configure --no-threads, or CMake with ZLIB_TURBO_THREADS off); or
-   Z_MEM_ERROR if memory or a thread could not be had, in which case strm
-   continues on one thread.
+     Returns Z_OK, or Z_STREAM_ERROR if strm is not valid, threads is negative
+   or more than 256, or threads is more than 1 and the library was built
+   without threads (configure --no-threads, or CMake with ZLIB_TURBO_THREADS
+   off). If memory or a thread cannot be had when the workers start, deflate()
+   goes on with the calling thread alone.
+
+     In zlib-turbo 1.0.0, threads was the number of workers, started at once at
+   every level, besides the calling thread.
 */
 
 /*

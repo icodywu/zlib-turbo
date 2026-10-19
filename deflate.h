@@ -306,6 +306,11 @@ typedef struct internal_state {
     struct mt_engine_s *mt;
     /* zlib-turbo: parallel match search (deflateSetThreads()), or Z_NULL */
 
+    int mt_want;
+    /* Worker threads asked for by deflateSetThreads(): they start at the first
+     * deflate() call that can use them (levels 4 to 9)
+     */
+
     Z_U8 mt_abs;
     /* Stream position of window[0] */
 

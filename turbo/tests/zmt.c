@@ -7,13 +7,19 @@
                                      least 2) and a hash of all output
    zmt check THREADS FILE...         compress FILE (a prefix of it for the slow cases) with many settings, input
                                      piece sizes, flushes and parameter changes, with 1 and with THREADS threads, and
-                                     compare every output byte and return code. */
+                                     compare every output byte and return code.
+   zmt count THREADS FILE            the threads running while a stream with deflateSetThreads(THREADS) compresses
+                                     FILE, at every level and strategy: THREADS at levels 4 to 9 (from 3 threads),
+                                     one otherwise (Linux: /proc/self/task). */
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
 #include "zlib.h"
 #include "zturbo.h"
+#ifdef __linux__
+#  include <dirent.h>
+#endif
 
 #ifdef _MSC_VER
 static double now(void) { struct timespec t; timespec_get(&t, TIME_UTC); return t.tv_sec + t.tv_nsec * 1e-9; }
@@ -161,7 +167,7 @@ int main(int argc, char **argv) {
             int level, k;
             small = n < 3000000 ? n : 3000000;
             for (level = 4; level <= 9; level++) {
-                cfg list[24];
+                cfg list[28];
                 int m = 0;
                 memset(list, 0, sizeof list);
                 list[m].level = level; list[m].wbits = 15; list[m].mem = 8; m++;                                   /* whole */
@@ -180,6 +186,9 @@ int main(int argc, char **argv) {
                 list[m] = list[0]; list[m].piece = 300000; list[m].param_at = 1; list[m].param_level = 1; list[m].param2_at = 3; m++;
                 list[m] = list[0]; list[m].piece = 300000; list[m].param_at = 1; list[m].param_level = 3; list[m].param2_at = 2; m++;
                 list[m] = list[0]; list[m].piece = 300000; list[m].param_at = 1; list[m].param_level = 0; list[m].param2_at = 2; m++;
+                /* level 1 first: the workers start only at the switch to this level */
+                list[m] = list[0]; list[m].level = 1; list[m].piece = 300000; list[m].param_at = 2;
+                list[m].param_level = level; m++;
                 list[m] = list[0]; list[m].piece = 300000; list[m].strategy = Z_RLE; list[m].param_at = 1;
                 list[m].param_level = level; list[m].set_strategy = 1; list[m].new_strategy = Z_DEFAULT_STRATEGY; m++;
                 list[m] = list[0]; list[m].piece = 300000; list[m].strategy = Z_HUFFMAN_ONLY; list[m].param_at = 2;
@@ -217,6 +226,44 @@ int main(int argc, char **argv) {
         printf("%d cases, %d differ (threads %d)\n", cases, bad, threads);
         return bad != 0;
     }
-    fprintf(stderr, "usage: zmt speed LEVEL THREADS FILE... | zmt check THREADS FILE...\n");
+    if (argc >= 4 && !strcmp(argv[1], "count")) {
+#ifdef __linux__
+        static const int strat[3] = {Z_DEFAULT_STRATEGY, Z_HUFFMAN_ONLY, Z_RLE};
+        int threads = atoi(argv[2]), level, st, bad = 0, cases = 0;
+        size_t n, cap;
+        unsigned char *p = load(argv[3], &n), *out;
+        cap = deflateBound(NULL, n) + 64;
+        out = malloc(cap);
+        for (level = 0; level <= 12; level++)
+            for (st = 0; st < 3; st++) {
+                z_stream s;
+                int want = level >= 4 && level <= 9 && st == 0 && threads > 2 ? threads : 1, got = 0;
+                DIR *d;
+                struct dirent *de;
+                memset(&s, 0, sizeof s);
+                if (deflateInit2(&s, level, Z_DEFLATED, 15, 8, strat[st]) != Z_OK) exit(3);
+                if (deflateSetThreads(&s, threads) != Z_OK) exit(4);
+                s.next_in = p; s.avail_in = (uInt)(n / 2); s.next_out = out; s.avail_out = (uInt)cap;
+                if (deflate(&s, Z_NO_FLUSH) != Z_OK) exit(5);
+                if ((d = opendir("/proc/self/task")) == NULL) { perror("/proc/self/task"); return 1; }
+                while ((de = readdir(d)) != NULL)
+                    got += de->d_name[0] != '.';
+                closedir(d);
+                deflateEnd(&s);
+                cases++;
+                if (got != want) {
+                    bad++;
+                    printf("level %d strategy %d: %d threads running, %d expected\n", level, strat[st], got, want);
+                }
+            }
+        free(p); free(out);
+        printf("%d cases, %d with the wrong number of threads (threads %d)\n", cases, bad, threads);
+        return bad != 0;
+#else
+        printf("zmt count: only on Linux\n");
+        return 0;
+#endif
+    }
+    fprintf(stderr, "usage: zmt speed LEVEL THREADS FILE... | zmt check THREADS FILE... | zmt count THREADS FILE\n");
     return 1;
 }

@@ -1,6 +1,16 @@
 
                 ChangeLog file for zlib
 
+Changes in zlib-turbo 1.0.1
+- deflateSetThreads(strm, n) runs up to n threads in all: the calling thread
+  and n - 1 workers (1.0.0 started n workers besides the calling thread); a
+  single worker gains nothing, so n = 2 stays on one thread
+- The workers start at the first deflate() call that can use them (levels 4 to
+  9, not Z_HUFFMAN_ONLY or Z_RLE): streams at other levels start none
+- deflateSetThreads() no longer returns Z_MEM_ERROR: if the workers cannot be
+  started, deflate() goes on with the calling thread alone
+- Compressed output unchanged
+
 Changes in zlib-turbo 1.0.0, an altered version of zlib 1.3.2 (see NOTICE)
 - Faster inflate_fast() with a 64-bit bit buffer and wide match copies
 - Larger first-level decoding tables (10 and 8 bits)

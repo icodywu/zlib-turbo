@@ -79,6 +79,7 @@ local block_state deflate_slow(deflate_state *s, int flush);
 #ifdef Z_TURBO_THREADS
 local void mt_reset(deflate_state *s);
 local void mt_free(z_streamp strm, deflate_state *s);
+local int mt_launch(z_streamp strm, deflate_state *s, int workers);
 local void mt_catch_up(deflate_state *s, unsigned end);
 local void mt_restart(deflate_state *s, Z_U8 at, int partial);
 #endif
@@ -1340,6 +1341,15 @@ int ZEXPORT deflate(z_streamp strm, int flush) {
         ERR_RETURN(strm, Z_STREAM_ERROR);
     }
     if (strm->avail_out == 0) ERR_RETURN(strm, Z_BUF_ERROR);
+#ifdef Z_TURBO_THREADS
+    /* the workers start at the first call that can use them: levels 4 to 9,
+       not Z_HUFFMAN_ONLY or Z_RLE (one thread if they cannot be had) */
+    if (s->mt == Z_NULL && s->mt_want &&
+        configuration_table[s->level].func == deflate_slow &&
+        s->strategy != Z_HUFFMAN_ONLY && s->strategy != Z_RLE &&
+        mt_launch(strm, s, s->mt_want) != Z_OK)
+        s->mt_want = 0;
+#endif
 
     old_flush = s->last_flush;
     s->last_flush = flush;
@@ -1699,6 +1709,7 @@ int ZEXPORT deflateCopy(z_streamp dest, z_streamp source) {
     ds->strm = dest;
 #ifdef Z_TURBO_THREADS
     ds->mt = Z_NULL;
+    ds->mt_want = 0;            /* the copy runs on one thread */
 #endif
 #ifdef Z_TURBO_OPT
     ds->opt = Z_NULL;
@@ -3170,16 +3181,24 @@ local void mt_free(z_streamp strm, deflate_state *s) {
 /* ========================================================================= */
 int ZEXPORT deflateSetThreads(z_streamp strm, int threads) {
     deflate_state *s;
-    struct mt_engine_s *e;
-    unsigned j, size;
-    int k;
 
     if (deflateStateCheck(strm) || threads < 0 || threads > 256)
         return Z_STREAM_ERROR;
     s = strm->state;
     mt_free(strm, s);
-    if (threads <= 1)
-        return Z_OK;
+    /* the workers besides the caller; one alone gains nothing (zturbo.h) */
+    s->mt_want = threads > 2 ? threads - 1 : 0;
+    return Z_OK;
+}
+
+/* Start workers worker threads for s, as deflate() does at the first call
+   that can use them. Returns Z_OK, or Z_MEM_ERROR, with no workers, if memory
+   or a thread could not be had. */
+local int mt_launch(z_streamp strm, deflate_state *s, int workers) {
+    struct mt_engine_s *e;
+    unsigned j, size;
+    int k, threads = workers;
+
     e = (struct mt_engine_s *)ZALLOC(strm, 1, sizeof(struct mt_engine_s));
     if (e == Z_NULL)
         return Z_MEM_ERROR;
