@@ -15,7 +15,7 @@ put it in place of zlib in a program, a package or a whole system, and nothing e
 | Decompression, enwik8 (level 6 streams) | 349 MB/s | 621 MB/s | **+78%** |
 | Compression, Silesia, level 1 | 114 MB/s | 151 MB/s | **+32%** |
 | Compression, Silesia, level 6 | 31.9 MB/s | 36.0 MB/s | **+13%** |
-| Compression, Silesia, level 6, 16 threads | 31.9 MB/s | 218 MB/s | **6.8×** |
+| Compression, Silesia, level 6, 16 threads | 31.9 MB/s | 183 MB/s | **5.7×** |
 | Smallest output, Silesia (zlib level 9, zlib-turbo level 12) | 67.64 MB | 64.58 MB | **-4.5%** |
 | Decompression, Silesia gzip streams, optional SIMD checksums | 418 MB/s | 806 MB/s | **+93%** |
 | Compressed output, levels 0 to 9 | | | **identical** |
@@ -36,15 +36,15 @@ zlib-turbo is more than known speedups applied to zlib. It contributes:
    corpora, nearly 35,000 damaged streams, about 80 million differential fuzzing runs, six processor architectures
    and MSVC (see [How it was tested](#how-it-was-tested)). Faster zlib-compatible libraries give it up; zlib-turbo
    shows how much speed there is without giving it up: 66% to 86% in decompression and 4% to 39% in compression on
-   one core, and up to 12 times as fast with threads.
+   one core, and up to 11 times as fast with threads.
 
 2. **Multithreaded compression whose output is zlib's.** At levels 4 to 9 zlib's hash chains depend only on the
    input, so the matches its lazy parse will ask for can be found ahead of it. Each worker thread replays zlib's
    parse over its chunk of input, starting a little before it, so that it searches exactly the positions zlib will
    search, with the chain length zlib will use. The calling thread keeps every decision of zlib's parse and takes
    99.99% of its searches from the workers, and finished blocks are written on workers only where zlib would write
-   them too, so even the return codes and pending output match. With 16 threads, level 6 runs 6.8 times as fast as
-   zlib 1.3.2 and level 9 up to 12 times, for the same bytes. We know of no other parallel deflate compressor whose
+   them too, so even the return codes and pending output match. With 16 threads, level 6 runs 5.7 to 8.5 times as
+   fast as zlib 1.3.2 and level 9 8.8 to 11 times, for the same bytes. We know of no other parallel deflate compressor whose
    output equals single-threaded zlib's: pigz, the usual parallel gzip, compresses separate pieces, so its bytes
    differ.
 
@@ -153,30 +153,33 @@ own.
 
 ## Multithreaded compression
 
-`deflateSetThreads()` puts worker threads on a stream. At levels 4 to 9 they search for matches ahead of the
-parse and write the finished blocks, and the compressed output is still zlib's, byte for byte, for any number of
-threads, any sizes of input and output per call, flushes, `deflateParams()` and dictionaries:
+`deflateSetThreads()` lets a stream use up to n threads: the calling thread and n - 1 workers, which start at the
+first `deflate()` call at levels 4 to 9. There they search for matches ahead of the parse and write the finished
+blocks, and the compressed output is still zlib's, byte for byte, for any number of threads, any sizes of input
+and output per call, flushes, `deflateParams()` and dictionaries:
 
 ```c
 #include "zturbo.h"
 
 deflateInit(&strm, 6);
-deflateSetThreads(&strm, 16);   /* 0 or 1: back to one thread */
+deflateSetThreads(&strm, 16);   /* 16 threads in all; 2 or less: one thread */
 /* deflate() as usual */
 ```
 
-| Silesia / enwik8, MB/s | 1 thread | 4 threads | 8 threads | 16 threads | 24 threads |
-|---|---:|---:|---:|---:|---:|
-| Level 4 | 85.8 / 70.7 | 214 / 205 | 223 / 212 | 232 / 219 | 211 / 211 |
-| Level 6 | 35.8 / 27.1 | 126 / 103 | 202 / 190 | **218 / 210** | 198 / 206 |
-| Level 9 | 14.1 / 20.7 | 51 / 78 | 92 / 155 | 148 / **223** | **160** / 211 |
+| Silesia / enwik8, MB/s | 1 thread | 3 threads | 4 threads | 8 threads | 16 threads | 24 threads |
+|---|---:|---:|---:|---:|---:|---:|
+| Level 4 | 85.8 / 70.7 | 146 / 130 | 187 / 184 | **214 / 210** | 212 / 198 | 196 / 192 |
+| Level 6 | 35.8 / 27.1 | 64 / 51 | 92 / 76 | 166 / 172 | **183 / 207** | 161 / 193 |
+| Level 9 | 14.2 / 20.7 | 26 / 40 | 38 / 59 | 75 / 135 | **115 / 209** | 114 / 201 |
 
-Each file compressed whole in one `deflate()` call, worker threads on one socket of a 2 × 32-core AMD EPYC 9334, GCC
-14 -O2, best of two runs. zlib 1.3.2 itself does 31.9 / 24.4 MB/s at level 6 and 13.1 / 18.9 at level 9. With 16
-threads that is 6.8 and 8.6 times zlib at level 6, and 11 to 12 times at level 9. The calling thread still chooses
-every match, in zlib's order, so the speed levels off near 220 MB/s; at level 9 on Silesia the workers are the
-limit. Levels 1 to 3, `Z_HUFFMAN_ONLY` and `Z_RLE` stay on one thread: their matches depend on the matches before
-them, so they cannot be found ahead with the same result.
+Each file compressed whole in one `deflate()` call, the threads on one socket of a 2 × 32-core AMD EPYC 9334, GCC 14
+-O2, best of two runs, the median of three nodes of the same type: with many threads the speed differs from node
+to node, and the fastest ran up to 23% faster at 16 threads. zlib 1.3.2 itself does 31.9 / 24.4 MB/s at level 6 and
+13.1 / 18.9 at level 9. With 16 threads that is 5.7 and 8.5 times zlib at level 6, and 8.8 and 11 times at level 9.
+The calling thread still chooses every match, in zlib's order, so the speed levels off near 210 MB/s; at level 9 on
+Silesia the workers are the limit. Two threads run as one, as a single worker cannot search far enough ahead of the
+parse to gain. Levels 1 to 3, `Z_HUFFMAN_ONLY` and `Z_RLE` stay on one thread and start no workers: their matches
+depend on the matches before them, so they cannot be found ahead with the same result.
 
 Two rules come with the threads, both in `zturbo.h`. When `deflate()` returns with input left, the next call must
 be given the same bytes (they may be at another address), since the workers read ahead. The workers write a block
@@ -294,7 +297,7 @@ Every test compares zlib-turbo with unmodified zlib 1.3.2, not only with expecte
 | Differential fuzzing | libFuzzer against zlib 1.3.2. Decompression: 36 million runs under AddressSanitizer and 35 million under UndefinedBehaviorSanitizer. Compression, with all flush modes, `deflateParams()`, dictionaries set or prepared, `deflatePrime()` and `deflateReset()`: 5.7 million runs under AddressSanitizer and 2.8 million under UndefinedBehaviorSanitizer. No difference and no report. |
 | Dictionaries | 9,315 combinations of level, window, `memLevel`, strategy and dictionary length per test file: the same results from zlib's `deflateSetDictionary()` and from zlib-turbo's `deflateSetDictionary()` and `deflateUseDictionary()`. |
 | Streaming | With `Z_SYNC_FLUSH`, every byte before a flush point comes out as soon as its compressed bytes are in (43,815 messages). |
-| Threads | Levels 4 to 9, 23 settings each (input and output in pieces down to one byte, sync and full flushes, `deflateParams()` to other levels, strategies and back, raw and zlib dictionaries, input moved and overwritten between calls) on 12 files, with 3 to 16 threads: every output byte and return code the same as with one thread, 1,656 cases in all, with assertions on. Also under ThreadSanitizer (clang and GCC), AddressSanitizer and UndefinedBehaviorSanitizer, on 32-bit x86, and with MSVC and Windows threads. |
+| Threads | Levels 4 to 9, 24 settings each (input and output in pieces down to one byte, sync and full flushes, `deflateParams()` to other levels, strategies and back, a stream that starts at level 1, raw and zlib dictionaries, input moved and overwritten between calls) on the 12 Silesia files and 20 MB of enwik9, with 3 to 16 threads: every output byte and return code the same as with one thread, 1,872 cases in all, with assertions on. The number of threads running at every level and strategy, on Linux. Also under ThreadSanitizer (clang and GCC), AddressSanitizer and UndefinedBehaviorSanitizer, on 32-bit x86, and with MSVC and Windows threads. |
 | Levels 10 to 12 | 23 settings per level (input and output in pieces down to one byte, flushes every 31 to 131,072 bytes, window sizes, `memLevel`, raw, zlib and gzip formats, strategies, dictionaries, `deflateCopy()`, `deflateParams()` among the levels) on five files of the corpora, also under AddressSanitizer and UndefinedBehaviorSanitizer: every stream decompresses to its input, also with stock zlib, and the same bytes come out however the input is fed. libFuzzer against zlib 1.3.2's inflate, with the stream fitting in `deflateBound()`: 409,943 runs under AddressSanitizer and 223,448 under UndefinedBehaviorSanitizer, no report. |
 | SIMD checksums | CRC-32 and Adler-32 against byte-at-a-time references for every length 0 to 4096 at every alignment 0 to 63, long buffers of random bytes and of all ones (the largest Adler-32 sums) in one call and in pieces, and `crc32_combine()` and `adler32_combine()`: 527,572 cases, the same with GCC 14 (also `-march=x86-64-v3`), clang 18, 32-bit x86, MSVC and under AddressSanitizer and UndefinedBehaviorSanitizer. With SIMD on: identical compressed output at levels 0 to 9, the damaged-stream tests, `make test` and ctest. |
 | zlib's own tests | `make test`, also in a `ZLIB_DEBUG` build; zlib's `test/infcover.c` with new cases for the fast loop. |

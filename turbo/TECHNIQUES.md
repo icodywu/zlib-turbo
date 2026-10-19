@@ -263,15 +263,19 @@ After levels 0 to 3, `Z_HUFFMAN_ONLY` or `Z_RLE`, whose chains are incomplete, t
 the switch back. When `deflate()` returns, the workers have copied all the input they read, so the application may
 reuse its buffer. The one new rule is that input left over must be passed again unchanged.
 
-**What it gives.** Silesia / enwik8, MB/s, each file whole, worker threads on one 32-core socket:
+**What it gives.** Silesia / enwik8, MB/s, each file whole, threads in all (the calling thread and the workers)
+on one 32-core socket, the median of three nodes:
 
-| | 1 thread | 4 | 8 | 16 | 24 |
-|---|---:|---:|---:|---:|---:|
-| Level 6 | 35.8 / 27.1 | 126 / 103 | 202 / 190 | 218 / 210 | 198 / 206 |
-| Level 9 | 14.1 / 20.7 | 51 / 78 | 92 / 155 | 148 / 223 | 160 / 211 |
+| | 1 thread | 3 | 4 | 8 | 16 | 24 |
+|---|---:|---:|---:|---:|---:|---:|
+| Level 6 | 35.8 / 27.1 | 64 / 51 | 92 / 76 | 166 / 172 | 183 / 207 | 161 / 193 |
+| Level 9 | 14.2 / 20.7 | 26 / 40 | 38 / 59 | 75 / 135 | 115 / 209 | 114 / 201 |
 
-Writing blocks on workers added 17% to 23% at 16 threads: it had taken a quarter of the calling thread's time. The
-calling thread is now the limit at about 220 MB/s, spending its time choosing matches in zlib's order, which no
+A single worker gains nothing: the calling thread then searches the chunks the worker has not reached itself, on
+top of its parse, and was 3% to 15% slower than with no worker at levels 6 and 9. So two threads run as one, and
+the workers start only at levels 4 to 9, at the first `deflate()` call there. Writing blocks on workers added 17%
+to 23% with 16 workers: it had taken a quarter of the calling thread's time. The calling thread is now the limit at
+about 210 MB/s, spending its time choosing matches in zlib's order, which no
 thread can do ahead. At level 9 on Silesia the workers are the limit, as long chains there take many steps per
 position.
 

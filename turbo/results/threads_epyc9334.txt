@@ -1,3 +1,271 @@
+Threaded compression, zlib-turbo 1.0.1 (deflateSetThreads(strm, n): n threads in all, the calling thread and
+n - 1 workers, from n = 3), AMD EPYC 9334 (2 x 32 cores), GCC 14.2 -O2, zmt speed LEVEL THREADS FILES
+(turbo/tests/zmt.c): each file whole in one deflate() call, taskset -c 0-31 (one socket), best of two rounds,
+on three nodes of the same type at once (auh7-4b-gpu-145, auh7-4b-gpu-187, auh7-4b-gpu-189). S = Silesia (12 files), E = enwik8. T = threads in all.
+The multithreaded speed differs from node to node by up to a quarter; the README gives the medians.
+Every hash equal per level and corpus: the same output for any thread count.
+
+case        node 1   node 2   node 3   median
+L4 S T1       85.8     85.8     85.8     85.8
+L4 S T3      145.7    144.5    148.9    145.7
+L4 S T4      201.0    184.8    186.8    186.8
+L4 S T8      228.6    213.7    213.0    213.7
+L4 S T16     230.7    211.8    207.1    211.8
+L4 S T24     206.2    196.0    193.8    196.0
+L4 E T1       70.8     70.7     70.4     70.7
+L4 E T3      129.9    127.4    135.2    129.9
+L4 E T4      191.9    183.2    184.2    184.2
+L4 E T8      210.1    214.1    205.3    210.1
+L4 E T16     227.4    193.5    198.3    198.3
+L4 E T24     209.4    191.9    190.1    191.9
+L6 S T1       35.8     35.8     35.8     35.8
+L6 S T3       65.8     63.5     64.3     64.3
+L6 S T4       97.4     92.0     91.7     92.0
+L6 S T8      184.4    165.9    162.3    165.9
+L6 S T16     211.2    182.8    174.5    182.8
+L6 S T24     192.6    159.9    160.8    160.8
+L6 E T1       27.0     27.2     27.1     27.1
+L6 E T3       51.7     50.9     51.2     51.2
+L6 E T4       76.4     75.7     75.8     75.8
+L6 E T8      174.8    172.0    169.9    172.0
+L6 E T16     211.4    206.7    200.5    206.7
+L6 E T24     200.6    181.8    192.5    192.5
+L9 S T1       14.1     14.2     14.2     14.2
+L9 S T3       26.1     25.6     25.8     25.8
+L9 S T4       38.6     37.7     37.5     37.7
+L9 S T8       81.3     74.1     74.9     74.9
+L9 S T16     141.5    115.4    112.2    115.4
+L9 S T24     155.5    110.8    114.1    114.1
+L9 E T1       20.7     20.7     20.7     20.7
+L9 E T3       39.8     39.4     40.1     39.8
+L9 E T4       58.9     58.0     58.5     58.5
+L9 E T8      135.3    133.4    134.9    134.9
+L9 E T16     220.9    203.0    209.2    209.2
+L9 E T24     210.4    200.5    191.6    200.5
+
+Raw:
+node1 r1 L4 S T1 TOTAL L4 T1 comp 85.75 MB/s hash a09d0158f8e4169c
+node1 r1 L4 S T3 TOTAL L4 T3 comp 145.67 MB/s hash a09d0158f8e4169c
+node1 r1 L4 S T4 TOTAL L4 T4 comp 197.93 MB/s hash a09d0158f8e4169c
+node1 r1 L4 S T8 TOTAL L4 T8 comp 228.64 MB/s hash a09d0158f8e4169c
+node1 r1 L4 S T16 TOTAL L4 T16 comp 227.06 MB/s hash a09d0158f8e4169c
+node1 r1 L4 S T24 TOTAL L4 T24 comp 206.15 MB/s hash a09d0158f8e4169c
+node1 r1 L4 E T1 TOTAL L4 T1 comp 70.70 MB/s hash 2f8ef9827fbfb097
+node1 r1 L4 E T3 TOTAL L4 T3 comp 129.88 MB/s hash 2f8ef9827fbfb097
+node1 r1 L4 E T4 TOTAL L4 T4 comp 191.95 MB/s hash 2f8ef9827fbfb097
+node1 r1 L4 E T8 TOTAL L4 T8 comp 210.14 MB/s hash 2f8ef9827fbfb097
+node1 r1 L4 E T16 TOTAL L4 T16 comp 223.37 MB/s hash 2f8ef9827fbfb097
+node1 r1 L4 E T24 TOTAL L4 T24 comp 205.21 MB/s hash 2f8ef9827fbfb097
+node1 r1 L6 S T1 TOTAL L6 T1 comp 35.83 MB/s hash 834d090df99d0211
+node1 r1 L6 S T3 TOTAL L6 T3 comp 65.81 MB/s hash 834d090df99d0211
+node1 r1 L6 S T4 TOTAL L6 T4 comp 97.43 MB/s hash 834d090df99d0211
+node1 r1 L6 S T8 TOTAL L6 T8 comp 183.38 MB/s hash 834d090df99d0211
+node1 r1 L6 S T16 TOTAL L6 T16 comp 206.95 MB/s hash 834d090df99d0211
+node1 r1 L6 S T24 TOTAL L6 T24 comp 192.33 MB/s hash 834d090df99d0211
+node1 r1 L6 E T1 TOTAL L6 T1 comp 26.96 MB/s hash ddb1c54c4c6e39ba
+node1 r1 L6 E T3 TOTAL L6 T3 comp 51.68 MB/s hash ddb1c54c4c6e39ba
+node1 r1 L6 E T4 TOTAL L6 T4 comp 76.36 MB/s hash ddb1c54c4c6e39ba
+node1 r1 L6 E T8 TOTAL L6 T8 comp 174.69 MB/s hash ddb1c54c4c6e39ba
+node1 r1 L6 E T16 TOTAL L6 T16 comp 205.82 MB/s hash ddb1c54c4c6e39ba
+node1 r1 L6 E T24 TOTAL L6 T24 comp 196.66 MB/s hash ddb1c54c4c6e39ba
+node1 r1 L9 S T1 TOTAL L9 T1 comp 14.13 MB/s hash 3afae7e3f5ed15d8
+node1 r1 L9 S T3 TOTAL L9 T3 comp 26.05 MB/s hash 3afae7e3f5ed15d8
+node1 r1 L9 S T4 TOTAL L9 T4 comp 38.61 MB/s hash 3afae7e3f5ed15d8
+node1 r1 L9 S T8 TOTAL L9 T8 comp 81.10 MB/s hash 3afae7e3f5ed15d8
+node1 r1 L9 S T16 TOTAL L9 T16 comp 141.52 MB/s hash 3afae7e3f5ed15d8
+node1 r1 L9 S T24 TOTAL L9 T24 comp 154.10 MB/s hash 3afae7e3f5ed15d8
+node1 r1 L9 E T1 TOTAL L9 T1 comp 20.66 MB/s hash a62a4f685d89cf56
+node1 r1 L9 E T3 TOTAL L9 T3 comp 39.78 MB/s hash a62a4f685d89cf56
+node1 r1 L9 E T4 TOTAL L9 T4 comp 58.91 MB/s hash a62a4f685d89cf56
+node1 r1 L9 E T8 TOTAL L9 T8 comp 135.17 MB/s hash a62a4f685d89cf56
+node1 r1 L9 E T16 TOTAL L9 T16 comp 214.52 MB/s hash a62a4f685d89cf56
+node1 r1 L9 E T24 TOTAL L9 T24 comp 209.16 MB/s hash a62a4f685d89cf56
+node1 r2 L4 S T1 TOTAL L4 T1 comp 85.85 MB/s hash a09d0158f8e4169c
+node1 r2 L4 S T3 TOTAL L4 T3 comp 145.20 MB/s hash a09d0158f8e4169c
+node1 r2 L4 S T4 TOTAL L4 T4 comp 201.02 MB/s hash a09d0158f8e4169c
+node1 r2 L4 S T8 TOTAL L4 T8 comp 219.50 MB/s hash a09d0158f8e4169c
+node1 r2 L4 S T16 TOTAL L4 T16 comp 230.72 MB/s hash a09d0158f8e4169c
+node1 r2 L4 S T24 TOTAL L4 T24 comp 205.75 MB/s hash a09d0158f8e4169c
+node1 r2 L4 E T1 TOTAL L4 T1 comp 70.78 MB/s hash 2f8ef9827fbfb097
+node1 r2 L4 E T3 TOTAL L4 T3 comp 129.26 MB/s hash 2f8ef9827fbfb097
+node1 r2 L4 E T4 TOTAL L4 T4 comp 187.99 MB/s hash 2f8ef9827fbfb097
+node1 r2 L4 E T8 TOTAL L4 T8 comp 210.14 MB/s hash 2f8ef9827fbfb097
+node1 r2 L4 E T16 TOTAL L4 T16 comp 227.39 MB/s hash 2f8ef9827fbfb097
+node1 r2 L4 E T24 TOTAL L4 T24 comp 209.43 MB/s hash 2f8ef9827fbfb097
+node1 r2 L6 S T1 TOTAL L6 T1 comp 35.70 MB/s hash 834d090df99d0211
+node1 r2 L6 S T3 TOTAL L6 T3 comp 65.85 MB/s hash 834d090df99d0211
+node1 r2 L6 S T4 TOTAL L6 T4 comp 97.38 MB/s hash 834d090df99d0211
+node1 r2 L6 S T8 TOTAL L6 T8 comp 184.40 MB/s hash 834d090df99d0211
+node1 r2 L6 S T16 TOTAL L6 T16 comp 211.21 MB/s hash 834d090df99d0211
+node1 r2 L6 S T24 TOTAL L6 T24 comp 192.59 MB/s hash 834d090df99d0211
+node1 r2 L6 E T1 TOTAL L6 T1 comp 27.04 MB/s hash ddb1c54c4c6e39ba
+node1 r2 L6 E T3 TOTAL L6 T3 comp 51.65 MB/s hash ddb1c54c4c6e39ba
+node1 r2 L6 E T4 TOTAL L6 T4 comp 76.09 MB/s hash ddb1c54c4c6e39ba
+node1 r2 L6 E T8 TOTAL L6 T8 comp 174.75 MB/s hash ddb1c54c4c6e39ba
+node1 r2 L6 E T16 TOTAL L6 T16 comp 211.45 MB/s hash ddb1c54c4c6e39ba
+node1 r2 L6 E T24 TOTAL L6 T24 comp 200.60 MB/s hash ddb1c54c4c6e39ba
+node1 r2 L9 S T1 TOTAL L9 T1 comp 14.12 MB/s hash 3afae7e3f5ed15d8
+node1 r2 L9 S T3 TOTAL L9 T3 comp 26.07 MB/s hash 3afae7e3f5ed15d8
+node1 r2 L9 S T4 TOTAL L9 T4 comp 38.65 MB/s hash 3afae7e3f5ed15d8
+node1 r2 L9 S T8 TOTAL L9 T8 comp 81.35 MB/s hash 3afae7e3f5ed15d8
+node1 r2 L9 S T16 TOTAL L9 T16 comp 141.18 MB/s hash 3afae7e3f5ed15d8
+node1 r2 L9 S T24 TOTAL L9 T24 comp 155.52 MB/s hash 3afae7e3f5ed15d8
+node1 r2 L9 E T1 TOTAL L9 T1 comp 20.64 MB/s hash a62a4f685d89cf56
+node1 r2 L9 E T3 TOTAL L9 T3 comp 39.81 MB/s hash a62a4f685d89cf56
+node1 r2 L9 E T4 TOTAL L9 T4 comp 58.91 MB/s hash a62a4f685d89cf56
+node1 r2 L9 E T8 TOTAL L9 T8 comp 135.30 MB/s hash a62a4f685d89cf56
+node1 r2 L9 E T16 TOTAL L9 T16 comp 220.88 MB/s hash a62a4f685d89cf56
+node1 r2 L9 E T24 TOTAL L9 T24 comp 210.40 MB/s hash a62a4f685d89cf56
+node2 r1 L4 S T1 TOTAL L4 T1 comp 85.81 MB/s hash a09d0158f8e4169c
+node2 r1 L4 S T3 TOTAL L4 T3 comp 140.91 MB/s hash a09d0158f8e4169c
+node2 r1 L4 S T4 TOTAL L4 T4 comp 184.77 MB/s hash a09d0158f8e4169c
+node2 r1 L4 S T8 TOTAL L4 T8 comp 213.71 MB/s hash a09d0158f8e4169c
+node2 r1 L4 S T16 TOTAL L4 T16 comp 211.84 MB/s hash a09d0158f8e4169c
+node2 r1 L4 S T24 TOTAL L4 T24 comp 195.96 MB/s hash a09d0158f8e4169c
+node2 r1 L4 E T1 TOTAL L4 T1 comp 70.69 MB/s hash 2f8ef9827fbfb097
+node2 r1 L4 E T3 TOTAL L4 T3 comp 127.36 MB/s hash 2f8ef9827fbfb097
+node2 r1 L4 E T4 TOTAL L4 T4 comp 183.22 MB/s hash 2f8ef9827fbfb097
+node2 r1 L4 E T8 TOTAL L4 T8 comp 207.39 MB/s hash 2f8ef9827fbfb097
+node2 r1 L4 E T16 TOTAL L4 T16 comp 193.49 MB/s hash 2f8ef9827fbfb097
+node2 r1 L4 E T24 TOTAL L4 T24 comp 191.91 MB/s hash 2f8ef9827fbfb097
+node2 r1 L6 S T1 TOTAL L6 T1 comp 34.84 MB/s hash 834d090df99d0211
+node2 r1 L6 S T3 TOTAL L6 T3 comp 63.49 MB/s hash 834d090df99d0211
+node2 r1 L6 S T4 TOTAL L6 T4 comp 91.54 MB/s hash 834d090df99d0211
+node2 r1 L6 S T8 TOTAL L6 T8 comp 165.87 MB/s hash 834d090df99d0211
+node2 r1 L6 S T16 TOTAL L6 T16 comp 182.77 MB/s hash 834d090df99d0211
+node2 r1 L6 S T24 TOTAL L6 T24 comp 159.91 MB/s hash 834d090df99d0211
+node2 r1 L6 E T1 TOTAL L6 T1 comp 27.17 MB/s hash ddb1c54c4c6e39ba
+node2 r1 L6 E T3 TOTAL L6 T3 comp 50.65 MB/s hash ddb1c54c4c6e39ba
+node2 r1 L6 E T4 TOTAL L6 T4 comp 75.72 MB/s hash ddb1c54c4c6e39ba
+node2 r1 L6 E T8 TOTAL L6 T8 comp 169.11 MB/s hash ddb1c54c4c6e39ba
+node2 r1 L6 E T16 TOTAL L6 T16 comp 206.74 MB/s hash ddb1c54c4c6e39ba
+node2 r1 L6 E T24 TOTAL L6 T24 comp 181.84 MB/s hash ddb1c54c4c6e39ba
+node2 r1 L9 S T1 TOTAL L9 T1 comp 14.14 MB/s hash 3afae7e3f5ed15d8
+node2 r1 L9 S T3 TOTAL L9 T3 comp 25.62 MB/s hash 3afae7e3f5ed15d8
+node2 r1 L9 S T4 TOTAL L9 T4 comp 37.09 MB/s hash 3afae7e3f5ed15d8
+node2 r1 L9 S T8 TOTAL L9 T8 comp 74.11 MB/s hash 3afae7e3f5ed15d8
+node2 r1 L9 S T16 TOTAL L9 T16 comp 107.05 MB/s hash 3afae7e3f5ed15d8
+node2 r1 L9 S T24 TOTAL L9 T24 comp 110.82 MB/s hash 3afae7e3f5ed15d8
+node2 r1 L9 E T1 TOTAL L9 T1 comp 20.69 MB/s hash a62a4f685d89cf56
+node2 r1 L9 E T3 TOTAL L9 T3 comp 39.21 MB/s hash a62a4f685d89cf56
+node2 r1 L9 E T4 TOTAL L9 T4 comp 57.65 MB/s hash a62a4f685d89cf56
+node2 r1 L9 E T8 TOTAL L9 T8 comp 133.45 MB/s hash a62a4f685d89cf56
+node2 r1 L9 E T16 TOTAL L9 T16 comp 202.97 MB/s hash a62a4f685d89cf56
+node2 r1 L9 E T24 TOTAL L9 T24 comp 200.52 MB/s hash a62a4f685d89cf56
+node2 r2 L4 S T1 TOTAL L4 T1 comp 85.84 MB/s hash a09d0158f8e4169c
+node2 r2 L4 S T3 TOTAL L4 T3 comp 144.46 MB/s hash a09d0158f8e4169c
+node2 r2 L4 S T4 TOTAL L4 T4 comp 183.53 MB/s hash a09d0158f8e4169c
+node2 r2 L4 S T8 TOTAL L4 T8 comp 209.22 MB/s hash a09d0158f8e4169c
+node2 r2 L4 S T16 TOTAL L4 T16 comp 204.72 MB/s hash a09d0158f8e4169c
+node2 r2 L4 S T24 TOTAL L4 T24 comp 187.70 MB/s hash a09d0158f8e4169c
+node2 r2 L4 E T1 TOTAL L4 T1 comp 70.26 MB/s hash 2f8ef9827fbfb097
+node2 r2 L4 E T3 TOTAL L4 T3 comp 127.13 MB/s hash 2f8ef9827fbfb097
+node2 r2 L4 E T4 TOTAL L4 T4 comp 181.02 MB/s hash 2f8ef9827fbfb097
+node2 r2 L4 E T8 TOTAL L4 T8 comp 214.09 MB/s hash 2f8ef9827fbfb097
+node2 r2 L4 E T16 TOTAL L4 T16 comp 192.73 MB/s hash 2f8ef9827fbfb097
+node2 r2 L4 E T24 TOTAL L4 T24 comp 185.00 MB/s hash 2f8ef9827fbfb097
+node2 r2 L6 S T1 TOTAL L6 T1 comp 35.78 MB/s hash 834d090df99d0211
+node2 r2 L6 S T3 TOTAL L6 T3 comp 62.36 MB/s hash 834d090df99d0211
+node2 r2 L6 S T4 TOTAL L6 T4 comp 92.00 MB/s hash 834d090df99d0211
+node2 r2 L6 S T8 TOTAL L6 T8 comp 162.94 MB/s hash 834d090df99d0211
+node2 r2 L6 S T16 TOTAL L6 T16 comp 174.70 MB/s hash 834d090df99d0211
+node2 r2 L6 S T24 TOTAL L6 T24 comp 157.06 MB/s hash 834d090df99d0211
+node2 r2 L6 E T1 TOTAL L6 T1 comp 27.11 MB/s hash ddb1c54c4c6e39ba
+node2 r2 L6 E T3 TOTAL L6 T3 comp 50.90 MB/s hash ddb1c54c4c6e39ba
+node2 r2 L6 E T4 TOTAL L6 T4 comp 75.09 MB/s hash ddb1c54c4c6e39ba
+node2 r2 L6 E T8 TOTAL L6 T8 comp 172.02 MB/s hash ddb1c54c4c6e39ba
+node2 r2 L6 E T16 TOTAL L6 T16 comp 191.68 MB/s hash ddb1c54c4c6e39ba
+node2 r2 L6 E T24 TOTAL L6 T24 comp 179.48 MB/s hash ddb1c54c4c6e39ba
+node2 r2 L9 S T1 TOTAL L9 T1 comp 14.15 MB/s hash 3afae7e3f5ed15d8
+node2 r2 L9 S T3 TOTAL L9 T3 comp 25.56 MB/s hash 3afae7e3f5ed15d8
+node2 r2 L9 S T4 TOTAL L9 T4 comp 37.73 MB/s hash 3afae7e3f5ed15d8
+node2 r2 L9 S T8 TOTAL L9 T8 comp 73.94 MB/s hash 3afae7e3f5ed15d8
+node2 r2 L9 S T16 TOTAL L9 T16 comp 115.43 MB/s hash 3afae7e3f5ed15d8
+node2 r2 L9 S T24 TOTAL L9 T24 comp 109.54 MB/s hash 3afae7e3f5ed15d8
+node2 r2 L9 E T1 TOTAL L9 T1 comp 20.65 MB/s hash a62a4f685d89cf56
+node2 r2 L9 E T3 TOTAL L9 T3 comp 39.35 MB/s hash a62a4f685d89cf56
+node2 r2 L9 E T4 TOTAL L9 T4 comp 57.99 MB/s hash a62a4f685d89cf56
+node2 r2 L9 E T8 TOTAL L9 T8 comp 132.42 MB/s hash a62a4f685d89cf56
+node2 r2 L9 E T16 TOTAL L9 T16 comp 199.78 MB/s hash a62a4f685d89cf56
+node2 r2 L9 E T24 TOTAL L9 T24 comp 183.97 MB/s hash a62a4f685d89cf56
+node3 r1 L4 S T1 TOTAL L4 T1 comp 84.82 MB/s hash a09d0158f8e4169c
+node3 r1 L4 S T3 TOTAL L4 T3 comp 148.89 MB/s hash a09d0158f8e4169c
+node3 r1 L4 S T4 TOTAL L4 T4 comp 186.84 MB/s hash a09d0158f8e4169c
+node3 r1 L4 S T8 TOTAL L4 T8 comp 212.46 MB/s hash a09d0158f8e4169c
+node3 r1 L4 S T16 TOTAL L4 T16 comp 207.08 MB/s hash a09d0158f8e4169c
+node3 r1 L4 S T24 TOTAL L4 T24 comp 193.83 MB/s hash a09d0158f8e4169c
+node3 r1 L4 E T1 TOTAL L4 T1 comp 70.28 MB/s hash 2f8ef9827fbfb097
+node3 r1 L4 E T3 TOTAL L4 T3 comp 135.20 MB/s hash 2f8ef9827fbfb097
+node3 r1 L4 E T4 TOTAL L4 T4 comp 183.29 MB/s hash 2f8ef9827fbfb097
+node3 r1 L4 E T8 TOTAL L4 T8 comp 204.84 MB/s hash 2f8ef9827fbfb097
+node3 r1 L4 E T16 TOTAL L4 T16 comp 196.51 MB/s hash 2f8ef9827fbfb097
+node3 r1 L4 E T24 TOTAL L4 T24 comp 187.70 MB/s hash 2f8ef9827fbfb097
+node3 r1 L6 S T1 TOTAL L6 T1 comp 35.74 MB/s hash 834d090df99d0211
+node3 r1 L6 S T3 TOTAL L6 T3 comp 63.24 MB/s hash 834d090df99d0211
+node3 r1 L6 S T4 TOTAL L6 T4 comp 91.74 MB/s hash 834d090df99d0211
+node3 r1 L6 S T8 TOTAL L6 T8 comp 162.33 MB/s hash 834d090df99d0211
+node3 r1 L6 S T16 TOTAL L6 T16 comp 174.53 MB/s hash 834d090df99d0211
+node3 r1 L6 S T24 TOTAL L6 T24 comp 148.50 MB/s hash 834d090df99d0211
+node3 r1 L6 E T1 TOTAL L6 T1 comp 27.05 MB/s hash ddb1c54c4c6e39ba
+node3 r1 L6 E T3 TOTAL L6 T3 comp 51.21 MB/s hash ddb1c54c4c6e39ba
+node3 r1 L6 E T4 TOTAL L6 T4 comp 75.84 MB/s hash ddb1c54c4c6e39ba
+node3 r1 L6 E T8 TOTAL L6 T8 comp 169.91 MB/s hash ddb1c54c4c6e39ba
+node3 r1 L6 E T16 TOTAL L6 T16 comp 200.53 MB/s hash ddb1c54c4c6e39ba
+node3 r1 L6 E T24 TOTAL L6 T24 comp 192.50 MB/s hash ddb1c54c4c6e39ba
+node3 r1 L9 S T1 TOTAL L9 T1 comp 14.15 MB/s hash 3afae7e3f5ed15d8
+node3 r1 L9 S T3 TOTAL L9 T3 comp 25.75 MB/s hash 3afae7e3f5ed15d8
+node3 r1 L9 S T4 TOTAL L9 T4 comp 37.49 MB/s hash 3afae7e3f5ed15d8
+node3 r1 L9 S T8 TOTAL L9 T8 comp 74.77 MB/s hash 3afae7e3f5ed15d8
+node3 r1 L9 S T16 TOTAL L9 T16 comp 112.25 MB/s hash 3afae7e3f5ed15d8
+node3 r1 L9 S T24 TOTAL L9 T24 comp 112.07 MB/s hash 3afae7e3f5ed15d8
+node3 r1 L9 E T1 TOTAL L9 T1 comp 20.67 MB/s hash a62a4f685d89cf56
+node3 r1 L9 E T3 TOTAL L9 T3 comp 39.69 MB/s hash a62a4f685d89cf56
+node3 r1 L9 E T4 TOTAL L9 T4 comp 58.52 MB/s hash a62a4f685d89cf56
+node3 r1 L9 E T8 TOTAL L9 T8 comp 134.95 MB/s hash a62a4f685d89cf56
+node3 r1 L9 E T16 TOTAL L9 T16 comp 209.18 MB/s hash a62a4f685d89cf56
+node3 r1 L9 E T24 TOTAL L9 T24 comp 191.56 MB/s hash a62a4f685d89cf56
+node3 r2 L4 S T1 TOTAL L4 T1 comp 85.84 MB/s hash a09d0158f8e4169c
+node3 r2 L4 S T3 TOTAL L4 T3 comp 140.91 MB/s hash a09d0158f8e4169c
+node3 r2 L4 S T4 TOTAL L4 T4 comp 186.38 MB/s hash a09d0158f8e4169c
+node3 r2 L4 S T8 TOTAL L4 T8 comp 213.00 MB/s hash a09d0158f8e4169c
+node3 r2 L4 S T16 TOTAL L4 T16 comp 205.19 MB/s hash a09d0158f8e4169c
+node3 r2 L4 S T24 TOTAL L4 T24 comp 191.35 MB/s hash a09d0158f8e4169c
+node3 r2 L4 E T1 TOTAL L4 T1 comp 70.37 MB/s hash 2f8ef9827fbfb097
+node3 r2 L4 E T3 TOTAL L4 T3 comp 128.44 MB/s hash 2f8ef9827fbfb097
+node3 r2 L4 E T4 TOTAL L4 T4 comp 184.15 MB/s hash 2f8ef9827fbfb097
+node3 r2 L4 E T8 TOTAL L4 T8 comp 205.34 MB/s hash 2f8ef9827fbfb097
+node3 r2 L4 E T16 TOTAL L4 T16 comp 198.28 MB/s hash 2f8ef9827fbfb097
+node3 r2 L4 E T24 TOTAL L4 T24 comp 190.08 MB/s hash 2f8ef9827fbfb097
+node3 r2 L6 S T1 TOTAL L6 T1 comp 35.78 MB/s hash 834d090df99d0211
+node3 r2 L6 S T3 TOTAL L6 T3 comp 64.26 MB/s hash 834d090df99d0211
+node3 r2 L6 S T4 TOTAL L6 T4 comp 91.30 MB/s hash 834d090df99d0211
+node3 r2 L6 S T8 TOTAL L6 T8 comp 161.63 MB/s hash 834d090df99d0211
+node3 r2 L6 S T16 TOTAL L6 T16 comp 173.69 MB/s hash 834d090df99d0211
+node3 r2 L6 S T24 TOTAL L6 T24 comp 160.81 MB/s hash 834d090df99d0211
+node3 r2 L6 E T1 TOTAL L6 T1 comp 27.03 MB/s hash ddb1c54c4c6e39ba
+node3 r2 L6 E T3 TOTAL L6 T3 comp 51.16 MB/s hash ddb1c54c4c6e39ba
+node3 r2 L6 E T4 TOTAL L6 T4 comp 75.12 MB/s hash ddb1c54c4c6e39ba
+node3 r2 L6 E T8 TOTAL L6 T8 comp 168.17 MB/s hash ddb1c54c4c6e39ba
+node3 r2 L6 E T16 TOTAL L6 T16 comp 195.19 MB/s hash ddb1c54c4c6e39ba
+node3 r2 L6 E T24 TOTAL L6 T24 comp 185.34 MB/s hash ddb1c54c4c6e39ba
+node3 r2 L9 S T1 TOTAL L9 T1 comp 14.14 MB/s hash 3afae7e3f5ed15d8
+node3 r2 L9 S T3 TOTAL L9 T3 comp 25.75 MB/s hash 3afae7e3f5ed15d8
+node3 r2 L9 S T4 TOTAL L9 T4 comp 37.37 MB/s hash 3afae7e3f5ed15d8
+node3 r2 L9 S T8 TOTAL L9 T8 comp 74.90 MB/s hash 3afae7e3f5ed15d8
+node3 r2 L9 S T16 TOTAL L9 T16 comp 104.78 MB/s hash 3afae7e3f5ed15d8
+node3 r2 L9 S T24 TOTAL L9 T24 comp 114.10 MB/s hash 3afae7e3f5ed15d8
+node3 r2 L9 E T1 TOTAL L9 T1 comp 20.64 MB/s hash a62a4f685d89cf56
+node3 r2 L9 E T3 TOTAL L9 T3 comp 40.06 MB/s hash a62a4f685d89cf56
+node3 r2 L9 E T4 TOTAL L9 T4 comp 58.52 MB/s hash a62a4f685d89cf56
+node3 r2 L9 E T8 TOTAL L9 T8 comp 133.35 MB/s hash a62a4f685d89cf56
+node3 r2 L9 E T16 TOTAL L9 T16 comp 204.78 MB/s hash a62a4f685d89cf56
+node3 r2 L9 E T24 TOTAL L9 T24 comp 188.62 MB/s hash a62a4f685d89cf56
+
+
+====================================================================================================
+zlib-turbo 1.0.0 (ztmt23): deflateSetThreads(strm, n) started n workers besides the calling thread, so T here is
+the number of workers; one node.
+
 Threaded compression, zlib-turbo (turbo branch, deflateSetThreads()), AMD EPYC 9334 (2 x 32 cores), GCC 14.2 -O2,
 zmt speed LEVEL THREADS FILES (turbo/tests/zmt.c): each file whole in one deflate() call, worker threads with
 taskset -c 0-31 (one socket), best of two rounds. S = Silesia (12 files), E = enwik8. T1 = no threads.
