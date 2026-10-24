@@ -34,9 +34,10 @@ zlib-turbo is more than known speedups applied to zlib. It contributes:
    never what it decides: the same matches in the same order, the same blocks, the same bits, the same return
    codes. The guarantee is checked against unmodified zlib 1.3.2 rather than against expected outputs: three
    corpora, nearly 35,000 damaged streams, about 80 million differential fuzzing runs, six processor architectures
-   and MSVC (see [How it was tested](#how-it-was-tested)). Faster zlib-compatible libraries give it up; zlib-turbo
-   shows how much speed there is without giving it up: 66% to 86% in decompression and 4% to 39% in compression on
-   one core, and up to 11 times as fast with threads.
+   and MSVC (see [How it was tested](#how-it-was-tested)). Most faster zlib-compatible libraries give it up
+   (Chromium's copy of zlib keeps it when built with one option; see [Speed](#speed)); zlib-turbo shows how much
+   speed there is without giving it up, in plain C: 66% to 86% in decompression and 4% to 39% in compression on one
+   core, and up to 11 times as fast with threads.
 
 2. **Multithreaded compression whose output is zlib's.** At levels 4 to 9 zlib's hash chains depend only on the
    input, so the matches its lazy parse will ask for can be found ahead of it. Each worker thread replays zlib's
@@ -74,7 +75,8 @@ zlib-turbo is more than known speedups applied to zlib. It contributes:
 
 Faster zlib-compatible libraries exist; [zlib-ng](https://github.com/zlib-ng/zlib-ng) is the best known, and on one
 core it is faster than zlib-turbo. But they compress differently: the output is valid, yet not the bytes zlib
-would write. That breaks anything that hashes or compares compressed data:
+would write. (Chromium's copy of zlib is the exception when built with its `USE_ZLIB_RABIN_KARP_HASH` option, which
+is not its default; see [Speed](#speed).) Different bytes break anything that hashes or compares compressed data:
 
 - In January 2023, a change of compressor in git made the source archives that GitHub serves differ by a few bytes.
   Every published checksum stopped matching, and builds that verify downloads broke across Homebrew, Bazel and many
@@ -116,6 +118,25 @@ For context, zlib-ng 2.3.3 (compat mode, same machine and compiler) decompresses
 which reaches 82% to 86% of its speed without any SIMD code (the default build). zlib-ng compresses two to three times as fast, with
 different output; at level 1 its files are 18% to 22% larger than zlib's. All runs:
 [`turbo/results/speed_epyc9334.txt`](turbo/results/speed_epyc9334.txt).
+
+Two other fast copies of zlib, measured the same way on Silesia, with their SIMD code and `-march=native` (zlib-turbo
+also with its optional SIMD checksums and `-march=native`), MB/s:
+
+| Silesia | Output is zlib's | Compression, level 1 / 6 / 9 | Decompression, level 1 / 6 / 9 |
+|---|---|---|---|
+| zlib 1.3.2 | | 114 / 31.9 / 13.0 | 412 / 438 / 442 |
+| zlib-turbo | yes | 151 / 36.1 / 14.2 | 681 / 738 / 744 |
+| zlib-turbo, SIMD checksums, `-march=native` | yes | 155 / 36.2 / 14.1 | 790 / 866 / 873 |
+| [Chromium's zlib](https://chromium.googlesource.com/chromium/src/third_party/zlib), `USE_ZLIB_RABIN_KARP_HASH` | yes | 152 / 35.9 / 14.1 | 828 / 873 / 880 |
+| Chromium's zlib, default build | no | 154 / 58.8 / 23.3 | 828 / 873 / 880 |
+| [Cloudflare's zlib](https://github.com/cloudflare/zlib) (zlib 1.2.8 base) | no | 155 / 62.7 / 24.4 | 758 / 812 / 818 |
+
+Chromium's zlib built with `USE_ZLIB_RABIN_KARP_HASH` also writes zlib's bytes (checked at levels 1, 6 and 9): on one
+core it compresses as fast as zlib-turbo and decompresses 1% to 5% faster than zlib-turbo with SIMD checksums, using
+SIMD code for x86 and Arm where zlib-turbo's default build is plain C. Its default build, like Cloudflare's,
+compresses levels 6 and 9 1.6 to 1.7 times as fast as zlib-turbo, with different output (files within 2% of zlib's
+size). Beside them, zlib-turbo adds multithreaded compression with zlib's output, levels 10 to 12 and prepared
+dictionaries. All runs: [`turbo/results/forks_epyc9334.txt`](turbo/results/forks_epyc9334.txt).
 
 zlib-turbo is also in [lzbench](https://github.com/inikep/lzbench) and [TurboBench](https://github.com/powturbo/TurboBench),
 which measure it with zlib, zlib-ng, libdeflate and many other codecs; TurboBench publishes

@@ -376,7 +376,8 @@ kept.
 
 ## What is not changed, and why
 
-**Decisions that shape the output.** Faster zlib-compatible libraries change these:
+**Decisions that shape the output.** Most faster zlib-compatible libraries change these (Chromium's zlib keeps zlib's
+hash, and its output, when built with `USE_ZLIB_RABIN_KARP_HASH`; README, "Speed"):
 
 - the hash function;
 - how the match search works and how far it looks;
