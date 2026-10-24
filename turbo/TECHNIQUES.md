@@ -359,6 +359,9 @@ Each was kept only if it was faster (for levels 10 to 12: smaller) without being
 | Write a whole length/distance pair into the bit buffer at once | Zstandard's combined codes | -2% to +0.6% |
 | Copy short-distance matches as Zstandard does (`ZSTD_overlapCopy8`) | Zstandard | decompression -0.2% to -1.3% |
 | Copy 32 bytes per step after the first 16 | Zstandard's copy loop | within 0.7% |
+| Copy short-distance matches sixteen bytes a step, doubling the repeating pattern until it spans sixteen | Chromium's zlib (`chunkcopy.h`) | -0.3% to -0.8% in one call, -1.3% to -3% with `-march=native` (measured with the next change, which alone does not touch one-call decoding) |
+| Copy from the window inline, sixteen bytes a step, instead of calling `memcpy()` | Chromium's zlib | +1.2% to +2.5% in pieces, none in one call; with `-march=native` -1% to -3% everywhere, as the whole loop compiles differently |
+| Force `copy_back()` inline: GCC 14 keeps it out of line, a call per match | | 0% to +2.5% at `-O2`, -0.2% to -3% with `-march=native` |
 | Larger first-level decoding tables: 9 to 11 bits for distances, 11 for literals and lengths | | -0.1% to -1.3% on average (11-bit lengths: within 1%); second lookups were already rare, 0.3-0.4% of distances and 1-2% of other codes |
 | Fetch the next code before copying a match | common in fast decoders | 32-bit x86 -5% to -8%; 64-bit with GCC 14 -1% to -3% in one call, +1% to +2% in pieces; clang +4% |
 | Index the dictionary faster in `deflateSetDictionary()` | | at most 1% to 3%: indexing takes about 2.5 cycles per position, bound by memory writes |
@@ -373,6 +376,17 @@ Each was kept only if it was faster (for levels 10 to 12: smaller) without being
 
 Compression and decompression speed on Silesia, Canterbury + Calgary and enwik8 as above, each against the version
 kept.
+
+**Against Chromium's zlib.** Built with `USE_ZLIB_RABIN_KARP_HASH`, it writes zlib's bytes and decompresses up to 11%
+faster in one call and 5% to 15% faster in pieces than zlib-turbo with SIMD checksums (README, "Speed"). A sampling
+profile shows the two spending their time in the same places in the same proportions: match copies 16% to 24%,
+distance lookups 8% to 12%, decoding tables 2% to 5%, Adler-32 2% to 3%. valgrind counts the same instructions per
+decoded byte within 3% (level 1, Canterbury + Calgary in one call: 13.45 against Chromium's 13.65; Silesia in pieces:
+13.84 against 13.90) and about the same simulated branch mispredictions. Chromium's loop simply runs 10% to 14% more
+instructions per cycle where it leads; at Silesia level 6 the two run equally fast (862.6 and 860.6 MB/s with
+`-march=x86-64-v3`). Closing that would mean shaping the loop for one compiler and processor, which the plain C of
+the default build is meant to avoid; the three copy changes above are what was tried. Counts and speeds:
+[`results/chromium_compare_epyc9334.txt`](results/chromium_compare_epyc9334.txt).
 
 ## What is not changed, and why
 
