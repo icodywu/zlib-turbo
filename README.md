@@ -132,8 +132,11 @@ also with its optional SIMD checksums and `-march=native`), MB/s:
 | [Cloudflare's zlib](https://github.com/cloudflare/zlib) (zlib 1.2.8 base) | no | 155 / 62.7 / 24.4 | 758 / 812 / 818 |
 
 Chromium's zlib built with `USE_ZLIB_RABIN_KARP_HASH` also writes zlib's bytes (checked at levels 1, 6 and 9): on one
-core it compresses as fast as zlib-turbo and decompresses 1% to 5% faster than zlib-turbo with SIMD checksums, using
-SIMD code for x86 and Arm where zlib-turbo's default build is plain C. Its default build, like Cloudflare's,
+core it compresses as fast as zlib-turbo and decompresses faster, using SIMD code for x86 and Arm where zlib-turbo's
+default build is plain C. Against zlib-turbo with SIMD checksums and `-march=native`, on Silesia, Canterbury +
+Calgary and enwik8, it decompresses from 1% slower to 11% faster in one `inflate()` call (faster most at level 1) and
+5% to 15% faster in 16 KiB / 64 KiB pieces; against zlib-turbo's default build (plain C, no `-march`), 15% to 36%
+faster. Its default build, like Cloudflare's,
 compresses levels 6 and 9 1.6 to 1.7 times as fast as zlib-turbo, with different output (files within 2% of zlib's
 size). Beside them, zlib-turbo adds multithreaded compression with zlib's output, levels 10 to 12 and prepared
 dictionaries. All runs: [`turbo/results/forks_epyc9334.txt`](turbo/results/forks_epyc9334.txt).
