@@ -12,9 +12,10 @@
 #  pragma message("Assembler code may have bugs -- use at your own risk")
 #else
 
-#ifdef Z_U8
-/* Fast loop: with a 64-bit type the bit buffer is refilled eight bytes at a
-   time, and matches are copied eight or sixteen bytes at a time. */
+#if Z_INFLATE_FAST64
+/* Fast loop (Z_INFLATE_FAST64, see inftrees.h): the bit buffer is refilled
+   eight bytes at a time, and matches are copied eight or sixteen bytes at a
+   time. */
 
 #define TRACE_LITERAL(here) \
     Tracevv((stderr, (here)->val >= 0x20 && (here)->val < 0x7f ? \
@@ -144,7 +145,7 @@ void ZLIB_INTERNAL inflate_fast(z_streamp strm, unsigned start) {
     unsigned len;               /* match length, unused bytes */
     unsigned dist;              /* match distance */
     unsigned char FAR *from;    /* where to copy match from */
-#ifdef Z_U8
+#if Z_INFLATE_FAST64
     Z_U8 hold8;                 /* 64-bit bit buffer of the fast loop */
     z_const unsigned char FAR *last8;   /* two refills fit after in */
     unsigned char FAR *end8;    /* room for a match and fifteen more */
@@ -171,7 +172,7 @@ void ZLIB_INTERNAL inflate_fast(z_streamp strm, unsigned start) {
     lmask = (1U << state->lenbits) - 1;
     dmask = (1U << state->distbits) - 1;
 
-#ifdef Z_U8
+#if Z_INFLATE_FAST64
     /* Fast loop, while sixteen bytes can be read at in (two refills of
        eight bytes, the first advancing in by up to seven) and a match plus
        fifteen bytes fits in the output. Each table lookup comes before the
@@ -538,7 +539,7 @@ void ZLIB_INTERNAL inflate_fast(z_streamp strm, unsigned start) {
         }
     } while (in < last && out < end);
 
-#ifdef Z_U8
+#if Z_INFLATE_FAST64
   leave:
 #endif
     /* return unused bytes (on entry, bits < 8, so in won't go too far back) */
