@@ -229,10 +229,10 @@ round=2 op=decompress level=6 corpus=enwik8 build=chromium-zlib-rabin-karp mode=
 round=2 op=decompress level=6 corpus=enwik8 build=chromium-zlib-rabin-karp mode=16K/64K MB/s=638.6
 round=2 op=decompress level=9 corpus=enwik8 build=chromium-zlib-rabin-karp mode=one-call MB/s=711.0
 round=2 op=decompress level=9 corpus=enwik8 build=chromium-zlib-rabin-karp mode=16K/64K MB/s=638.8
-# zlib-turbo 1.0.2 (inffast.c: each code looked up before the refill that follows it), 2026-10-25: decompression of
-# zlib-turbo 1.0.1 (431b4af code) and 1.0.2, -O2 and -O2 -march=native -DZ_TURBO_SIMD, beside chromium-zlib-rabin-karp
-# (built as above), the five at once on one node, each pinned to a core complex of its own; two nodes (round = node).
-# The README's zlib-turbo rows and its comparison with Chromium's zlib come from these lines.
+# zlib-turbo with the first change of 1.1.0 (07c3013, inffast.c: each code looked up before the refill that follows
+# it), 2026-10-25: decompression of zlib-turbo 1.0.1 (431b4af code) and 07c3013, -O2 and -O2 -march=native
+# -DZ_TURBO_SIMD, beside chromium-zlib-rabin-karp (built as above), the five at once on one node, each pinned to a core
+# complex of its own; two nodes (round = node). The sections below, 1.1.0 as released, supersede it.
 round=1 op=decompress level=1 corpus=silesia build=zlib-turbo-1.0.1 mode=one-call MB/s=677.0
 round=1 op=decompress level=1 corpus=silesia build=zlib-turbo-1.0.1 mode=16K/64K MB/s=591.8
 round=1 op=decompress level=6 corpus=silesia build=zlib-turbo-1.0.1 mode=one-call MB/s=738.0
@@ -251,24 +251,24 @@ round=1 op=decompress level=6 corpus=enwik8 build=zlib-turbo-1.0.1 mode=one-call
 round=1 op=decompress level=6 corpus=enwik8 build=zlib-turbo-1.0.1 mode=16K/64K MB/s=527.1
 round=1 op=decompress level=9 corpus=enwik8 build=zlib-turbo-1.0.1 mode=one-call MB/s=621.3
 round=1 op=decompress level=9 corpus=enwik8 build=zlib-turbo-1.0.1 mode=16K/64K MB/s=528.4
-round=1 op=decompress level=1 corpus=silesia build=zlib-turbo-1.0.2 mode=one-call MB/s=692.7
-round=1 op=decompress level=1 corpus=silesia build=zlib-turbo-1.0.2 mode=16K/64K MB/s=610.5
-round=1 op=decompress level=6 corpus=silesia build=zlib-turbo-1.0.2 mode=one-call MB/s=753.1
-round=1 op=decompress level=6 corpus=silesia build=zlib-turbo-1.0.2 mode=16K/64K MB/s=670.9
-round=1 op=decompress level=9 corpus=silesia build=zlib-turbo-1.0.2 mode=one-call MB/s=759.2
-round=1 op=decompress level=9 corpus=silesia build=zlib-turbo-1.0.2 mode=16K/64K MB/s=675.3
-round=1 op=decompress level=1 corpus=canterbury+calgary build=zlib-turbo-1.0.2 mode=one-call MB/s=775.8
-round=1 op=decompress level=1 corpus=canterbury+calgary build=zlib-turbo-1.0.2 mode=16K/64K MB/s=674.0
-round=1 op=decompress level=6 corpus=canterbury+calgary build=zlib-turbo-1.0.2 mode=one-call MB/s=881.4
-round=1 op=decompress level=6 corpus=canterbury+calgary build=zlib-turbo-1.0.2 mode=16K/64K MB/s=776.9
-round=1 op=decompress level=9 corpus=canterbury+calgary build=zlib-turbo-1.0.2 mode=one-call MB/s=891.0
-round=1 op=decompress level=9 corpus=canterbury+calgary build=zlib-turbo-1.0.2 mode=16K/64K MB/s=782.8
-round=1 op=decompress level=1 corpus=enwik8 build=zlib-turbo-1.0.2 mode=one-call MB/s=610.5
-round=1 op=decompress level=1 corpus=enwik8 build=zlib-turbo-1.0.2 mode=16K/64K MB/s=511.4
-round=1 op=decompress level=6 corpus=enwik8 build=zlib-turbo-1.0.2 mode=one-call MB/s=627.7
-round=1 op=decompress level=6 corpus=enwik8 build=zlib-turbo-1.0.2 mode=16K/64K MB/s=545.3
-round=1 op=decompress level=9 corpus=enwik8 build=zlib-turbo-1.0.2 mode=one-call MB/s=628.3
-round=1 op=decompress level=9 corpus=enwik8 build=zlib-turbo-1.0.2 mode=16K/64K MB/s=545.1
+round=1 op=decompress level=1 corpus=silesia build=zlib-turbo-07c3013 mode=one-call MB/s=692.7
+round=1 op=decompress level=1 corpus=silesia build=zlib-turbo-07c3013 mode=16K/64K MB/s=610.5
+round=1 op=decompress level=6 corpus=silesia build=zlib-turbo-07c3013 mode=one-call MB/s=753.1
+round=1 op=decompress level=6 corpus=silesia build=zlib-turbo-07c3013 mode=16K/64K MB/s=670.9
+round=1 op=decompress level=9 corpus=silesia build=zlib-turbo-07c3013 mode=one-call MB/s=759.2
+round=1 op=decompress level=9 corpus=silesia build=zlib-turbo-07c3013 mode=16K/64K MB/s=675.3
+round=1 op=decompress level=1 corpus=canterbury+calgary build=zlib-turbo-07c3013 mode=one-call MB/s=775.8
+round=1 op=decompress level=1 corpus=canterbury+calgary build=zlib-turbo-07c3013 mode=16K/64K MB/s=674.0
+round=1 op=decompress level=6 corpus=canterbury+calgary build=zlib-turbo-07c3013 mode=one-call MB/s=881.4
+round=1 op=decompress level=6 corpus=canterbury+calgary build=zlib-turbo-07c3013 mode=16K/64K MB/s=776.9
+round=1 op=decompress level=9 corpus=canterbury+calgary build=zlib-turbo-07c3013 mode=one-call MB/s=891.0
+round=1 op=decompress level=9 corpus=canterbury+calgary build=zlib-turbo-07c3013 mode=16K/64K MB/s=782.8
+round=1 op=decompress level=1 corpus=enwik8 build=zlib-turbo-07c3013 mode=one-call MB/s=610.5
+round=1 op=decompress level=1 corpus=enwik8 build=zlib-turbo-07c3013 mode=16K/64K MB/s=511.4
+round=1 op=decompress level=6 corpus=enwik8 build=zlib-turbo-07c3013 mode=one-call MB/s=627.7
+round=1 op=decompress level=6 corpus=enwik8 build=zlib-turbo-07c3013 mode=16K/64K MB/s=545.3
+round=1 op=decompress level=9 corpus=enwik8 build=zlib-turbo-07c3013 mode=one-call MB/s=628.3
+round=1 op=decompress level=9 corpus=enwik8 build=zlib-turbo-07c3013 mode=16K/64K MB/s=545.1
 round=1 op=decompress level=1 corpus=silesia build=zlib-turbo-1.0.1-simd-native mode=one-call MB/s=790.0
 round=1 op=decompress level=1 corpus=silesia build=zlib-turbo-1.0.1-simd-native mode=16K/64K MB/s=679.4
 round=1 op=decompress level=6 corpus=silesia build=zlib-turbo-1.0.1-simd-native mode=one-call MB/s=865.6
@@ -287,24 +287,24 @@ round=1 op=decompress level=6 corpus=enwik8 build=zlib-turbo-1.0.1-simd-native m
 round=1 op=decompress level=6 corpus=enwik8 build=zlib-turbo-1.0.1-simd-native mode=16K/64K MB/s=603.4
 round=1 op=decompress level=9 corpus=enwik8 build=zlib-turbo-1.0.1-simd-native mode=one-call MB/s=717.4
 round=1 op=decompress level=9 corpus=enwik8 build=zlib-turbo-1.0.1-simd-native mode=16K/64K MB/s=604.3
-round=1 op=decompress level=1 corpus=silesia build=zlib-turbo-1.0.2-simd-native mode=one-call MB/s=804.5
-round=1 op=decompress level=1 corpus=silesia build=zlib-turbo-1.0.2-simd-native mode=16K/64K MB/s=698.9
-round=1 op=decompress level=6 corpus=silesia build=zlib-turbo-1.0.2-simd-native mode=one-call MB/s=881.3
-round=1 op=decompress level=6 corpus=silesia build=zlib-turbo-1.0.2-simd-native mode=16K/64K MB/s=775.8
-round=1 op=decompress level=9 corpus=silesia build=zlib-turbo-1.0.2-simd-native mode=one-call MB/s=889.5
-round=1 op=decompress level=9 corpus=silesia build=zlib-turbo-1.0.2-simd-native mode=16K/64K MB/s=782.7
-round=1 op=decompress level=1 corpus=canterbury+calgary build=zlib-turbo-1.0.2-simd-native mode=one-call MB/s=925.7
-round=1 op=decompress level=1 corpus=canterbury+calgary build=zlib-turbo-1.0.2-simd-native mode=16K/64K MB/s=788.8
-round=1 op=decompress level=6 corpus=canterbury+calgary build=zlib-turbo-1.0.2-simd-native mode=one-call MB/s=1062.9
-round=1 op=decompress level=6 corpus=canterbury+calgary build=zlib-turbo-1.0.2-simd-native mode=16K/64K MB/s=903.4
-round=1 op=decompress level=9 corpus=canterbury+calgary build=zlib-turbo-1.0.2-simd-native mode=one-call MB/s=1074.9
-round=1 op=decompress level=9 corpus=canterbury+calgary build=zlib-turbo-1.0.2-simd-native mode=16K/64K MB/s=924.2
-round=1 op=decompress level=1 corpus=enwik8 build=zlib-turbo-1.0.2-simd-native mode=one-call MB/s=703.9
-round=1 op=decompress level=1 corpus=enwik8 build=zlib-turbo-1.0.2-simd-native mode=16K/64K MB/s=583.2
-round=1 op=decompress level=6 corpus=enwik8 build=zlib-turbo-1.0.2-simd-native mode=one-call MB/s=723.0
-round=1 op=decompress level=6 corpus=enwik8 build=zlib-turbo-1.0.2-simd-native mode=16K/64K MB/s=621.6
-round=1 op=decompress level=9 corpus=enwik8 build=zlib-turbo-1.0.2-simd-native mode=one-call MB/s=724.0
-round=1 op=decompress level=9 corpus=enwik8 build=zlib-turbo-1.0.2-simd-native mode=16K/64K MB/s=621.1
+round=1 op=decompress level=1 corpus=silesia build=zlib-turbo-07c3013-simd-native mode=one-call MB/s=804.5
+round=1 op=decompress level=1 corpus=silesia build=zlib-turbo-07c3013-simd-native mode=16K/64K MB/s=698.9
+round=1 op=decompress level=6 corpus=silesia build=zlib-turbo-07c3013-simd-native mode=one-call MB/s=881.3
+round=1 op=decompress level=6 corpus=silesia build=zlib-turbo-07c3013-simd-native mode=16K/64K MB/s=775.8
+round=1 op=decompress level=9 corpus=silesia build=zlib-turbo-07c3013-simd-native mode=one-call MB/s=889.5
+round=1 op=decompress level=9 corpus=silesia build=zlib-turbo-07c3013-simd-native mode=16K/64K MB/s=782.7
+round=1 op=decompress level=1 corpus=canterbury+calgary build=zlib-turbo-07c3013-simd-native mode=one-call MB/s=925.7
+round=1 op=decompress level=1 corpus=canterbury+calgary build=zlib-turbo-07c3013-simd-native mode=16K/64K MB/s=788.8
+round=1 op=decompress level=6 corpus=canterbury+calgary build=zlib-turbo-07c3013-simd-native mode=one-call MB/s=1062.9
+round=1 op=decompress level=6 corpus=canterbury+calgary build=zlib-turbo-07c3013-simd-native mode=16K/64K MB/s=903.4
+round=1 op=decompress level=9 corpus=canterbury+calgary build=zlib-turbo-07c3013-simd-native mode=one-call MB/s=1074.9
+round=1 op=decompress level=9 corpus=canterbury+calgary build=zlib-turbo-07c3013-simd-native mode=16K/64K MB/s=924.2
+round=1 op=decompress level=1 corpus=enwik8 build=zlib-turbo-07c3013-simd-native mode=one-call MB/s=703.9
+round=1 op=decompress level=1 corpus=enwik8 build=zlib-turbo-07c3013-simd-native mode=16K/64K MB/s=583.2
+round=1 op=decompress level=6 corpus=enwik8 build=zlib-turbo-07c3013-simd-native mode=one-call MB/s=723.0
+round=1 op=decompress level=6 corpus=enwik8 build=zlib-turbo-07c3013-simd-native mode=16K/64K MB/s=621.6
+round=1 op=decompress level=9 corpus=enwik8 build=zlib-turbo-07c3013-simd-native mode=one-call MB/s=724.0
+round=1 op=decompress level=9 corpus=enwik8 build=zlib-turbo-07c3013-simd-native mode=16K/64K MB/s=621.1
 round=1 op=decompress level=1 corpus=silesia build=chromium-zlib-rabin-karp mode=one-call MB/s=828.3
 round=1 op=decompress level=1 corpus=silesia build=chromium-zlib-rabin-karp mode=16K/64K MB/s=747.8
 round=1 op=decompress level=6 corpus=silesia build=chromium-zlib-rabin-karp mode=one-call MB/s=872.8
@@ -341,24 +341,24 @@ round=2 op=decompress level=6 corpus=enwik8 build=zlib-turbo-1.0.1 mode=one-call
 round=2 op=decompress level=6 corpus=enwik8 build=zlib-turbo-1.0.1 mode=16K/64K MB/s=527.0
 round=2 op=decompress level=9 corpus=enwik8 build=zlib-turbo-1.0.1 mode=one-call MB/s=621.2
 round=2 op=decompress level=9 corpus=enwik8 build=zlib-turbo-1.0.1 mode=16K/64K MB/s=528.4
-round=2 op=decompress level=1 corpus=silesia build=zlib-turbo-1.0.2 mode=one-call MB/s=692.8
-round=2 op=decompress level=1 corpus=silesia build=zlib-turbo-1.0.2 mode=16K/64K MB/s=611.1
-round=2 op=decompress level=6 corpus=silesia build=zlib-turbo-1.0.2 mode=one-call MB/s=753.2
-round=2 op=decompress level=6 corpus=silesia build=zlib-turbo-1.0.2 mode=16K/64K MB/s=670.6
-round=2 op=decompress level=9 corpus=silesia build=zlib-turbo-1.0.2 mode=one-call MB/s=759.4
-round=2 op=decompress level=9 corpus=silesia build=zlib-turbo-1.0.2 mode=16K/64K MB/s=674.7
-round=2 op=decompress level=1 corpus=canterbury+calgary build=zlib-turbo-1.0.2 mode=one-call MB/s=775.3
-round=2 op=decompress level=1 corpus=canterbury+calgary build=zlib-turbo-1.0.2 mode=16K/64K MB/s=674.5
-round=2 op=decompress level=6 corpus=canterbury+calgary build=zlib-turbo-1.0.2 mode=one-call MB/s=879.7
-round=2 op=decompress level=6 corpus=canterbury+calgary build=zlib-turbo-1.0.2 mode=16K/64K MB/s=777.0
-round=2 op=decompress level=9 corpus=canterbury+calgary build=zlib-turbo-1.0.2 mode=one-call MB/s=890.7
-round=2 op=decompress level=9 corpus=canterbury+calgary build=zlib-turbo-1.0.2 mode=16K/64K MB/s=782.6
-round=2 op=decompress level=1 corpus=enwik8 build=zlib-turbo-1.0.2 mode=one-call MB/s=610.3
-round=2 op=decompress level=1 corpus=enwik8 build=zlib-turbo-1.0.2 mode=16K/64K MB/s=512.5
-round=2 op=decompress level=6 corpus=enwik8 build=zlib-turbo-1.0.2 mode=one-call MB/s=627.0
-round=2 op=decompress level=6 corpus=enwik8 build=zlib-turbo-1.0.2 mode=16K/64K MB/s=545.1
-round=2 op=decompress level=9 corpus=enwik8 build=zlib-turbo-1.0.2 mode=one-call MB/s=628.0
-round=2 op=decompress level=9 corpus=enwik8 build=zlib-turbo-1.0.2 mode=16K/64K MB/s=544.5
+round=2 op=decompress level=1 corpus=silesia build=zlib-turbo-07c3013 mode=one-call MB/s=692.8
+round=2 op=decompress level=1 corpus=silesia build=zlib-turbo-07c3013 mode=16K/64K MB/s=611.1
+round=2 op=decompress level=6 corpus=silesia build=zlib-turbo-07c3013 mode=one-call MB/s=753.2
+round=2 op=decompress level=6 corpus=silesia build=zlib-turbo-07c3013 mode=16K/64K MB/s=670.6
+round=2 op=decompress level=9 corpus=silesia build=zlib-turbo-07c3013 mode=one-call MB/s=759.4
+round=2 op=decompress level=9 corpus=silesia build=zlib-turbo-07c3013 mode=16K/64K MB/s=674.7
+round=2 op=decompress level=1 corpus=canterbury+calgary build=zlib-turbo-07c3013 mode=one-call MB/s=775.3
+round=2 op=decompress level=1 corpus=canterbury+calgary build=zlib-turbo-07c3013 mode=16K/64K MB/s=674.5
+round=2 op=decompress level=6 corpus=canterbury+calgary build=zlib-turbo-07c3013 mode=one-call MB/s=879.7
+round=2 op=decompress level=6 corpus=canterbury+calgary build=zlib-turbo-07c3013 mode=16K/64K MB/s=777.0
+round=2 op=decompress level=9 corpus=canterbury+calgary build=zlib-turbo-07c3013 mode=one-call MB/s=890.7
+round=2 op=decompress level=9 corpus=canterbury+calgary build=zlib-turbo-07c3013 mode=16K/64K MB/s=782.6
+round=2 op=decompress level=1 corpus=enwik8 build=zlib-turbo-07c3013 mode=one-call MB/s=610.3
+round=2 op=decompress level=1 corpus=enwik8 build=zlib-turbo-07c3013 mode=16K/64K MB/s=512.5
+round=2 op=decompress level=6 corpus=enwik8 build=zlib-turbo-07c3013 mode=one-call MB/s=627.0
+round=2 op=decompress level=6 corpus=enwik8 build=zlib-turbo-07c3013 mode=16K/64K MB/s=545.1
+round=2 op=decompress level=9 corpus=enwik8 build=zlib-turbo-07c3013 mode=one-call MB/s=628.0
+round=2 op=decompress level=9 corpus=enwik8 build=zlib-turbo-07c3013 mode=16K/64K MB/s=544.5
 round=2 op=decompress level=1 corpus=silesia build=zlib-turbo-1.0.1-simd-native mode=one-call MB/s=790.2
 round=2 op=decompress level=1 corpus=silesia build=zlib-turbo-1.0.1-simd-native mode=16K/64K MB/s=678.9
 round=2 op=decompress level=6 corpus=silesia build=zlib-turbo-1.0.1-simd-native mode=one-call MB/s=866.0
@@ -377,24 +377,24 @@ round=2 op=decompress level=6 corpus=enwik8 build=zlib-turbo-1.0.1-simd-native m
 round=2 op=decompress level=6 corpus=enwik8 build=zlib-turbo-1.0.1-simd-native mode=16K/64K MB/s=601.6
 round=2 op=decompress level=9 corpus=enwik8 build=zlib-turbo-1.0.1-simd-native mode=one-call MB/s=717.3
 round=2 op=decompress level=9 corpus=enwik8 build=zlib-turbo-1.0.1-simd-native mode=16K/64K MB/s=603.3
-round=2 op=decompress level=1 corpus=silesia build=zlib-turbo-1.0.2-simd-native mode=one-call MB/s=804.5
-round=2 op=decompress level=1 corpus=silesia build=zlib-turbo-1.0.2-simd-native mode=16K/64K MB/s=702.5
-round=2 op=decompress level=6 corpus=silesia build=zlib-turbo-1.0.2-simd-native mode=one-call MB/s=881.2
-round=2 op=decompress level=6 corpus=silesia build=zlib-turbo-1.0.2-simd-native mode=16K/64K MB/s=778.5
-round=2 op=decompress level=9 corpus=silesia build=zlib-turbo-1.0.2-simd-native mode=one-call MB/s=889.1
-round=2 op=decompress level=9 corpus=silesia build=zlib-turbo-1.0.2-simd-native mode=16K/64K MB/s=780.9
-round=2 op=decompress level=1 corpus=canterbury+calgary build=zlib-turbo-1.0.2-simd-native mode=one-call MB/s=925.8
-round=2 op=decompress level=1 corpus=canterbury+calgary build=zlib-turbo-1.0.2-simd-native mode=16K/64K MB/s=786.7
-round=2 op=decompress level=6 corpus=canterbury+calgary build=zlib-turbo-1.0.2-simd-native mode=one-call MB/s=1064.3
-round=2 op=decompress level=6 corpus=canterbury+calgary build=zlib-turbo-1.0.2-simd-native mode=16K/64K MB/s=907.3
-round=2 op=decompress level=9 corpus=canterbury+calgary build=zlib-turbo-1.0.2-simd-native mode=one-call MB/s=1075.9
-round=2 op=decompress level=9 corpus=canterbury+calgary build=zlib-turbo-1.0.2-simd-native mode=16K/64K MB/s=924.1
-round=2 op=decompress level=1 corpus=enwik8 build=zlib-turbo-1.0.2-simd-native mode=one-call MB/s=704.9
-round=2 op=decompress level=1 corpus=enwik8 build=zlib-turbo-1.0.2-simd-native mode=16K/64K MB/s=581.5
-round=2 op=decompress level=6 corpus=enwik8 build=zlib-turbo-1.0.2-simd-native mode=one-call MB/s=721.4
-round=2 op=decompress level=6 corpus=enwik8 build=zlib-turbo-1.0.2-simd-native mode=16K/64K MB/s=620.0
-round=2 op=decompress level=9 corpus=enwik8 build=zlib-turbo-1.0.2-simd-native mode=one-call MB/s=724.5
-round=2 op=decompress level=9 corpus=enwik8 build=zlib-turbo-1.0.2-simd-native mode=16K/64K MB/s=621.6
+round=2 op=decompress level=1 corpus=silesia build=zlib-turbo-07c3013-simd-native mode=one-call MB/s=804.5
+round=2 op=decompress level=1 corpus=silesia build=zlib-turbo-07c3013-simd-native mode=16K/64K MB/s=702.5
+round=2 op=decompress level=6 corpus=silesia build=zlib-turbo-07c3013-simd-native mode=one-call MB/s=881.2
+round=2 op=decompress level=6 corpus=silesia build=zlib-turbo-07c3013-simd-native mode=16K/64K MB/s=778.5
+round=2 op=decompress level=9 corpus=silesia build=zlib-turbo-07c3013-simd-native mode=one-call MB/s=889.1
+round=2 op=decompress level=9 corpus=silesia build=zlib-turbo-07c3013-simd-native mode=16K/64K MB/s=780.9
+round=2 op=decompress level=1 corpus=canterbury+calgary build=zlib-turbo-07c3013-simd-native mode=one-call MB/s=925.8
+round=2 op=decompress level=1 corpus=canterbury+calgary build=zlib-turbo-07c3013-simd-native mode=16K/64K MB/s=786.7
+round=2 op=decompress level=6 corpus=canterbury+calgary build=zlib-turbo-07c3013-simd-native mode=one-call MB/s=1064.3
+round=2 op=decompress level=6 corpus=canterbury+calgary build=zlib-turbo-07c3013-simd-native mode=16K/64K MB/s=907.3
+round=2 op=decompress level=9 corpus=canterbury+calgary build=zlib-turbo-07c3013-simd-native mode=one-call MB/s=1075.9
+round=2 op=decompress level=9 corpus=canterbury+calgary build=zlib-turbo-07c3013-simd-native mode=16K/64K MB/s=924.1
+round=2 op=decompress level=1 corpus=enwik8 build=zlib-turbo-07c3013-simd-native mode=one-call MB/s=704.9
+round=2 op=decompress level=1 corpus=enwik8 build=zlib-turbo-07c3013-simd-native mode=16K/64K MB/s=581.5
+round=2 op=decompress level=6 corpus=enwik8 build=zlib-turbo-07c3013-simd-native mode=one-call MB/s=721.4
+round=2 op=decompress level=6 corpus=enwik8 build=zlib-turbo-07c3013-simd-native mode=16K/64K MB/s=620.0
+round=2 op=decompress level=9 corpus=enwik8 build=zlib-turbo-07c3013-simd-native mode=one-call MB/s=724.5
+round=2 op=decompress level=9 corpus=enwik8 build=zlib-turbo-07c3013-simd-native mode=16K/64K MB/s=621.6
 round=2 op=decompress level=1 corpus=silesia build=chromium-zlib-rabin-karp mode=one-call MB/s=828.0
 round=2 op=decompress level=1 corpus=silesia build=chromium-zlib-rabin-karp mode=16K/64K MB/s=747.4
 round=2 op=decompress level=6 corpus=silesia build=chromium-zlib-rabin-karp mode=one-call MB/s=872.9
@@ -413,3 +413,298 @@ round=2 op=decompress level=6 corpus=enwik8 build=chromium-zlib-rabin-karp mode=
 round=2 op=decompress level=6 corpus=enwik8 build=chromium-zlib-rabin-karp mode=16K/64K MB/s=638.8
 round=2 op=decompress level=9 corpus=enwik8 build=chromium-zlib-rabin-karp mode=one-call MB/s=711.6
 round=2 op=decompress level=9 corpus=enwik8 build=chromium-zlib-rabin-karp mode=16K/64K MB/s=638.7
+# zlib-turbo 1.1.0 as released (rel), 2026-10-25: the six libraries again, measured the same way as the first
+# section (zcmp: Silesia, compress2 and inflate one call / pieces, all at once, two nodes auh7-3b-gpu-032 and -047).
+# The README's table of the other fast copies of zlib comes from these lines.
+round=1 op=compress level=1 corpus=silesia build=zlib-1.3.2 ratio=2.7437 MB/s=114.19 hash=af77fc6eb7e84ea4
+round=1 op=decompress level=1 corpus=silesia build=zlib-1.3.2 mode=one-call MB/s=411.7
+round=1 op=decompress level=1 corpus=silesia build=zlib-1.3.2 mode=16K/64K MB/s=384.9
+round=1 op=compress level=6 corpus=silesia build=zlib-1.3.2 ratio=3.1067 MB/s=31.93 hash=834d090df99d0211
+round=1 op=decompress level=6 corpus=silesia build=zlib-1.3.2 mode=one-call MB/s=437.2
+round=1 op=decompress level=6 corpus=silesia build=zlib-1.3.2 mode=16K/64K MB/s=409.7
+round=1 op=compress level=9 corpus=silesia build=zlib-1.3.2 ratio=3.1332 MB/s=13.03 hash=3afae7e3f5ed15d8
+round=1 op=decompress level=9 corpus=silesia build=zlib-1.3.2 mode=one-call MB/s=441.6
+round=1 op=decompress level=9 corpus=silesia build=zlib-1.3.2 mode=16K/64K MB/s=412.8
+round=1 op=compress level=1 corpus=silesia build=zlib-turbo ratio=2.7437 MB/s=165.63 hash=af77fc6eb7e84ea4
+round=1 op=decompress level=1 corpus=silesia build=zlib-turbo mode=one-call MB/s=707.4
+round=1 op=decompress level=1 corpus=silesia build=zlib-turbo mode=16K/64K MB/s=626.6
+round=1 op=compress level=6 corpus=silesia build=zlib-turbo ratio=3.1067 MB/s=37.42 hash=834d090df99d0211
+round=1 op=decompress level=6 corpus=silesia build=zlib-turbo mode=one-call MB/s=758.6
+round=1 op=decompress level=6 corpus=silesia build=zlib-turbo mode=16K/64K MB/s=681.3
+round=1 op=compress level=9 corpus=silesia build=zlib-turbo ratio=3.1332 MB/s=14.40 hash=3afae7e3f5ed15d8
+round=1 op=decompress level=9 corpus=silesia build=zlib-turbo mode=one-call MB/s=766.5
+round=1 op=decompress level=9 corpus=silesia build=zlib-turbo mode=16K/64K MB/s=688.7
+round=1 op=compress level=1 corpus=silesia build=zlib-turbo-simd-native ratio=2.7437 MB/s=173.25 hash=af77fc6eb7e84ea4
+round=1 op=decompress level=1 corpus=silesia build=zlib-turbo-simd-native mode=one-call MB/s=805.1
+round=1 op=decompress level=1 corpus=silesia build=zlib-turbo-simd-native mode=16K/64K MB/s=713.8
+round=1 op=compress level=6 corpus=silesia build=zlib-turbo-simd-native ratio=3.1067 MB/s=37.50 hash=834d090df99d0211
+round=1 op=decompress level=6 corpus=silesia build=zlib-turbo-simd-native mode=one-call MB/s=879.8
+round=1 op=decompress level=6 corpus=silesia build=zlib-turbo-simd-native mode=16K/64K MB/s=793.3
+round=1 op=compress level=9 corpus=silesia build=zlib-turbo-simd-native ratio=3.1332 MB/s=14.35 hash=3afae7e3f5ed15d8
+round=1 op=decompress level=9 corpus=silesia build=zlib-turbo-simd-native mode=one-call MB/s=888.7
+round=1 op=decompress level=9 corpus=silesia build=zlib-turbo-simd-native mode=16K/64K MB/s=798.1
+round=1 op=compress level=1 corpus=silesia build=cloudflare-zlib ratio=2.7934 MB/s=154.68 hash=08f46a6d39d1b307
+round=1 op=decompress level=1 corpus=silesia build=cloudflare-zlib mode=one-call MB/s=757.7
+round=1 op=decompress level=1 corpus=silesia build=cloudflare-zlib mode=16K/64K MB/s=683.5
+round=1 op=compress level=6 corpus=silesia build=cloudflare-zlib ratio=3.0914 MB/s=62.70 hash=ba4de4031a81e11e
+round=1 op=decompress level=6 corpus=silesia build=cloudflare-zlib mode=one-call MB/s=811.1
+round=1 op=decompress level=6 corpus=silesia build=cloudflare-zlib mode=16K/64K MB/s=733.6
+round=1 op=compress level=9 corpus=silesia build=cloudflare-zlib ratio=3.1100 MB/s=24.39 hash=26c3e92c65f3c74d
+round=1 op=decompress level=9 corpus=silesia build=cloudflare-zlib mode=one-call MB/s=817.1
+round=1 op=decompress level=9 corpus=silesia build=cloudflare-zlib mode=16K/64K MB/s=737.7
+round=1 op=compress level=1 corpus=silesia build=chromium-zlib ratio=2.7878 MB/s=154.39 hash=fc132685dc42095d
+round=1 op=decompress level=1 corpus=silesia build=chromium-zlib mode=one-call MB/s=826.7
+round=1 op=decompress level=1 corpus=silesia build=chromium-zlib mode=16K/64K MB/s=747.2
+round=1 op=compress level=6 corpus=silesia build=chromium-zlib ratio=3.0906 MB/s=58.78 hash=b1aed7a46db72aaa
+round=1 op=decompress level=6 corpus=silesia build=chromium-zlib mode=one-call MB/s=872.3
+round=1 op=decompress level=6 corpus=silesia build=chromium-zlib mode=16K/64K MB/s=792.6
+round=1 op=compress level=9 corpus=silesia build=chromium-zlib ratio=3.1089 MB/s=23.35 hash=19f66ecaa9c3ddc7
+round=1 op=decompress level=9 corpus=silesia build=chromium-zlib mode=one-call MB/s=878.5
+round=1 op=decompress level=9 corpus=silesia build=chromium-zlib mode=16K/64K MB/s=792.4
+round=1 op=compress level=1 corpus=silesia build=chromium-zlib-rabin-karp ratio=2.7437 MB/s=151.07 hash=af77fc6eb7e84ea4
+round=1 op=decompress level=1 corpus=silesia build=chromium-zlib-rabin-karp mode=one-call MB/s=827.8
+round=1 op=decompress level=1 corpus=silesia build=chromium-zlib-rabin-karp mode=16K/64K MB/s=747.3
+round=1 op=compress level=6 corpus=silesia build=chromium-zlib-rabin-karp ratio=3.1067 MB/s=35.87 hash=834d090df99d0211
+round=1 op=decompress level=6 corpus=silesia build=chromium-zlib-rabin-karp mode=one-call MB/s=873.2
+round=1 op=decompress level=6 corpus=silesia build=chromium-zlib-rabin-karp mode=16K/64K MB/s=790.9
+round=1 op=compress level=9 corpus=silesia build=chromium-zlib-rabin-karp ratio=3.1332 MB/s=14.08 hash=3afae7e3f5ed15d8
+round=1 op=decompress level=9 corpus=silesia build=chromium-zlib-rabin-karp mode=one-call MB/s=878.9
+round=1 op=decompress level=9 corpus=silesia build=chromium-zlib-rabin-karp mode=16K/64K MB/s=795.3
+round=2 op=compress level=1 corpus=silesia build=zlib-1.3.2 ratio=2.7437 MB/s=114.25 hash=af77fc6eb7e84ea4
+round=2 op=decompress level=1 corpus=silesia build=zlib-1.3.2 mode=one-call MB/s=411.1
+round=2 op=decompress level=1 corpus=silesia build=zlib-1.3.2 mode=16K/64K MB/s=385.1
+round=2 op=compress level=6 corpus=silesia build=zlib-1.3.2 ratio=3.1067 MB/s=31.83 hash=834d090df99d0211
+round=2 op=decompress level=6 corpus=silesia build=zlib-1.3.2 mode=one-call MB/s=437.3
+round=2 op=decompress level=6 corpus=silesia build=zlib-1.3.2 mode=16K/64K MB/s=408.7
+round=2 op=compress level=9 corpus=silesia build=zlib-1.3.2 ratio=3.1332 MB/s=13.03 hash=3afae7e3f5ed15d8
+round=2 op=decompress level=9 corpus=silesia build=zlib-1.3.2 mode=one-call MB/s=442.2
+round=2 op=decompress level=9 corpus=silesia build=zlib-1.3.2 mode=16K/64K MB/s=413.0
+round=2 op=compress level=1 corpus=silesia build=zlib-turbo ratio=2.7437 MB/s=165.67 hash=af77fc6eb7e84ea4
+round=2 op=decompress level=1 corpus=silesia build=zlib-turbo mode=one-call MB/s=707.1
+round=2 op=decompress level=1 corpus=silesia build=zlib-turbo mode=16K/64K MB/s=625.7
+round=2 op=compress level=6 corpus=silesia build=zlib-turbo ratio=3.1067 MB/s=37.43 hash=834d090df99d0211
+round=2 op=decompress level=6 corpus=silesia build=zlib-turbo mode=one-call MB/s=760.4
+round=2 op=decompress level=6 corpus=silesia build=zlib-turbo mode=16K/64K MB/s=680.8
+round=2 op=compress level=9 corpus=silesia build=zlib-turbo ratio=3.1332 MB/s=14.37 hash=3afae7e3f5ed15d8
+round=2 op=decompress level=9 corpus=silesia build=zlib-turbo mode=one-call MB/s=766.0
+round=2 op=decompress level=9 corpus=silesia build=zlib-turbo mode=16K/64K MB/s=685.4
+round=2 op=compress level=1 corpus=silesia build=zlib-turbo-simd-native ratio=2.7437 MB/s=173.46 hash=af77fc6eb7e84ea4
+round=2 op=decompress level=1 corpus=silesia build=zlib-turbo-simd-native mode=one-call MB/s=804.8
+round=2 op=decompress level=1 corpus=silesia build=zlib-turbo-simd-native mode=16K/64K MB/s=715.8
+round=2 op=compress level=6 corpus=silesia build=zlib-turbo-simd-native ratio=3.1067 MB/s=37.50 hash=834d090df99d0211
+round=2 op=decompress level=6 corpus=silesia build=zlib-turbo-simd-native mode=one-call MB/s=880.8
+round=2 op=decompress level=6 corpus=silesia build=zlib-turbo-simd-native mode=16K/64K MB/s=793.6
+round=2 op=compress level=9 corpus=silesia build=zlib-turbo-simd-native ratio=3.1332 MB/s=14.34 hash=3afae7e3f5ed15d8
+round=2 op=decompress level=9 corpus=silesia build=zlib-turbo-simd-native mode=one-call MB/s=886.1
+round=2 op=decompress level=9 corpus=silesia build=zlib-turbo-simd-native mode=16K/64K MB/s=800.1
+round=2 op=compress level=1 corpus=silesia build=cloudflare-zlib ratio=2.7934 MB/s=154.61 hash=08f46a6d39d1b307
+round=2 op=decompress level=1 corpus=silesia build=cloudflare-zlib mode=one-call MB/s=757.6
+round=2 op=decompress level=1 corpus=silesia build=cloudflare-zlib mode=16K/64K MB/s=682.2
+round=2 op=compress level=6 corpus=silesia build=cloudflare-zlib ratio=3.0914 MB/s=62.68 hash=ba4de4031a81e11e
+round=2 op=decompress level=6 corpus=silesia build=cloudflare-zlib mode=one-call MB/s=811.2
+round=2 op=decompress level=6 corpus=silesia build=cloudflare-zlib mode=16K/64K MB/s=734.3
+round=2 op=compress level=9 corpus=silesia build=cloudflare-zlib ratio=3.1100 MB/s=24.37 hash=26c3e92c65f3c74d
+round=2 op=decompress level=9 corpus=silesia build=cloudflare-zlib mode=one-call MB/s=817.1
+round=2 op=decompress level=9 corpus=silesia build=cloudflare-zlib mode=16K/64K MB/s=738.4
+round=2 op=compress level=1 corpus=silesia build=chromium-zlib ratio=2.7878 MB/s=154.55 hash=fc132685dc42095d
+round=2 op=decompress level=1 corpus=silesia build=chromium-zlib mode=one-call MB/s=827.4
+round=2 op=decompress level=1 corpus=silesia build=chromium-zlib mode=16K/64K MB/s=746.6
+round=2 op=compress level=6 corpus=silesia build=chromium-zlib ratio=3.0906 MB/s=58.80 hash=b1aed7a46db72aaa
+round=2 op=decompress level=6 corpus=silesia build=chromium-zlib mode=one-call MB/s=872.7
+round=2 op=decompress level=6 corpus=silesia build=chromium-zlib mode=16K/64K MB/s=792.3
+round=2 op=compress level=9 corpus=silesia build=chromium-zlib ratio=3.1089 MB/s=23.35 hash=19f66ecaa9c3ddc7
+round=2 op=decompress level=9 corpus=silesia build=chromium-zlib mode=one-call MB/s=878.6
+round=2 op=decompress level=9 corpus=silesia build=chromium-zlib mode=16K/64K MB/s=798.0
+round=2 op=compress level=1 corpus=silesia build=chromium-zlib-rabin-karp ratio=2.7437 MB/s=151.13 hash=af77fc6eb7e84ea4
+round=2 op=decompress level=1 corpus=silesia build=chromium-zlib-rabin-karp mode=one-call MB/s=827.7
+round=2 op=decompress level=1 corpus=silesia build=chromium-zlib-rabin-karp mode=16K/64K MB/s=747.8
+round=2 op=compress level=6 corpus=silesia build=chromium-zlib-rabin-karp ratio=3.1067 MB/s=35.93 hash=834d090df99d0211
+round=2 op=decompress level=6 corpus=silesia build=chromium-zlib-rabin-karp mode=one-call MB/s=872.6
+round=2 op=decompress level=6 corpus=silesia build=chromium-zlib-rabin-karp mode=16K/64K MB/s=793.2
+round=2 op=compress level=9 corpus=silesia build=chromium-zlib-rabin-karp ratio=3.1332 MB/s=14.08 hash=3afae7e3f5ed15d8
+round=2 op=decompress level=9 corpus=silesia build=chromium-zlib-rabin-karp mode=one-call MB/s=879.3
+round=2 op=decompress level=9 corpus=silesia build=chromium-zlib-rabin-karp mode=16K/64K MB/s=798.0
+# zlib-turbo 1.1.0 (rel) against 1.0.1 (431b4af code) and Chromium's zlib with USE_ZLIB_RABIN_KARP_HASH on three
+# corpora, 2026-10-25: decompression, -O2 and -O2 -march=native -DZ_TURBO_SIMD, the five at once on one node, each
+# pinned to a core complex of its own; two nodes (round = node). The README's comparison with Chromium's zlib comes
+# from these lines.
+round=1 op=decompress level=1 corpus=silesia build=zlib-turbo-1.0.1 mode=one-call MB/s=681.1
+round=1 op=decompress level=1 corpus=silesia build=zlib-turbo-1.0.1 mode=16K/64K MB/s=591.8
+round=1 op=decompress level=6 corpus=silesia build=zlib-turbo-1.0.1 mode=one-call MB/s=738.4
+round=1 op=decompress level=6 corpus=silesia build=zlib-turbo-1.0.1 mode=16K/64K MB/s=648.4
+round=1 op=decompress level=9 corpus=silesia build=zlib-turbo-1.0.1 mode=one-call MB/s=743.9
+round=1 op=decompress level=9 corpus=silesia build=zlib-turbo-1.0.1 mode=16K/64K MB/s=652.0
+round=1 op=decompress level=1 corpus=canterbury+calgary build=zlib-turbo-1.0.1 mode=one-call MB/s=764.3
+round=1 op=decompress level=1 corpus=canterbury+calgary build=zlib-turbo-1.0.1 mode=16K/64K MB/s=657.1
+round=1 op=decompress level=6 corpus=canterbury+calgary build=zlib-turbo-1.0.1 mode=one-call MB/s=871.5
+round=1 op=decompress level=6 corpus=canterbury+calgary build=zlib-turbo-1.0.1 mode=16K/64K MB/s=753.0
+round=1 op=decompress level=9 corpus=canterbury+calgary build=zlib-turbo-1.0.1 mode=one-call MB/s=880.2
+round=1 op=decompress level=9 corpus=canterbury+calgary build=zlib-turbo-1.0.1 mode=16K/64K MB/s=758.1
+round=1 op=decompress level=1 corpus=enwik8 build=zlib-turbo-1.0.1 mode=one-call MB/s=603.2
+round=1 op=decompress level=1 corpus=enwik8 build=zlib-turbo-1.0.1 mode=16K/64K MB/s=497.3
+round=1 op=decompress level=6 corpus=enwik8 build=zlib-turbo-1.0.1 mode=one-call MB/s=620.3
+round=1 op=decompress level=6 corpus=enwik8 build=zlib-turbo-1.0.1 mode=16K/64K MB/s=527.7
+round=1 op=decompress level=9 corpus=enwik8 build=zlib-turbo-1.0.1 mode=one-call MB/s=622.1
+round=1 op=decompress level=9 corpus=enwik8 build=zlib-turbo-1.0.1 mode=16K/64K MB/s=527.4
+round=1 op=decompress level=1 corpus=silesia build=zlib-turbo-1.1.0 mode=one-call MB/s=713.7
+round=1 op=decompress level=1 corpus=silesia build=zlib-turbo-1.1.0 mode=16K/64K MB/s=629.0
+round=1 op=decompress level=6 corpus=silesia build=zlib-turbo-1.1.0 mode=one-call MB/s=760.1
+round=1 op=decompress level=6 corpus=silesia build=zlib-turbo-1.1.0 mode=16K/64K MB/s=680.2
+round=1 op=decompress level=9 corpus=silesia build=zlib-turbo-1.1.0 mode=one-call MB/s=766.2
+round=1 op=decompress level=9 corpus=silesia build=zlib-turbo-1.1.0 mode=16K/64K MB/s=687.0
+round=1 op=decompress level=1 corpus=canterbury+calgary build=zlib-turbo-1.1.0 mode=one-call MB/s=813.3
+round=1 op=decompress level=1 corpus=canterbury+calgary build=zlib-turbo-1.1.0 mode=16K/64K MB/s=707.0
+round=1 op=decompress level=6 corpus=canterbury+calgary build=zlib-turbo-1.1.0 mode=one-call MB/s=912.8
+round=1 op=decompress level=6 corpus=canterbury+calgary build=zlib-turbo-1.1.0 mode=16K/64K MB/s=800.4
+round=1 op=decompress level=9 corpus=canterbury+calgary build=zlib-turbo-1.1.0 mode=one-call MB/s=921.5
+round=1 op=decompress level=9 corpus=canterbury+calgary build=zlib-turbo-1.1.0 mode=16K/64K MB/s=809.2
+round=1 op=decompress level=1 corpus=enwik8 build=zlib-turbo-1.1.0 mode=one-call MB/s=635.6
+round=1 op=decompress level=1 corpus=enwik8 build=zlib-turbo-1.1.0 mode=16K/64K MB/s=536.3
+round=1 op=decompress level=6 corpus=enwik8 build=zlib-turbo-1.1.0 mode=one-call MB/s=640.4
+round=1 op=decompress level=6 corpus=enwik8 build=zlib-turbo-1.1.0 mode=16K/64K MB/s=561.6
+round=1 op=decompress level=9 corpus=enwik8 build=zlib-turbo-1.1.0 mode=one-call MB/s=641.4
+round=1 op=decompress level=9 corpus=enwik8 build=zlib-turbo-1.1.0 mode=16K/64K MB/s=560.7
+round=1 op=decompress level=1 corpus=silesia build=zlib-turbo-1.0.1-simd-native mode=one-call MB/s=788.8
+round=1 op=decompress level=1 corpus=silesia build=zlib-turbo-1.0.1-simd-native mode=16K/64K MB/s=678.2
+round=1 op=decompress level=6 corpus=silesia build=zlib-turbo-1.0.1-simd-native mode=one-call MB/s=865.8
+round=1 op=decompress level=6 corpus=silesia build=zlib-turbo-1.0.1-simd-native mode=16K/64K MB/s=751.7
+round=1 op=decompress level=9 corpus=silesia build=zlib-turbo-1.0.1-simd-native mode=one-call MB/s=873.4
+round=1 op=decompress level=9 corpus=silesia build=zlib-turbo-1.0.1-simd-native mode=16K/64K MB/s=754.0
+round=1 op=decompress level=1 corpus=canterbury+calgary build=zlib-turbo-1.0.1-simd-native mode=one-call MB/s=906.7
+round=1 op=decompress level=1 corpus=canterbury+calgary build=zlib-turbo-1.0.1-simd-native mode=16K/64K MB/s=773.3
+round=1 op=decompress level=6 corpus=canterbury+calgary build=zlib-turbo-1.0.1-simd-native mode=one-call MB/s=1049.6
+round=1 op=decompress level=6 corpus=canterbury+calgary build=zlib-turbo-1.0.1-simd-native mode=16K/64K MB/s=894.5
+round=1 op=decompress level=9 corpus=canterbury+calgary build=zlib-turbo-1.0.1-simd-native mode=one-call MB/s=1063.7
+round=1 op=decompress level=9 corpus=canterbury+calgary build=zlib-turbo-1.0.1-simd-native mode=16K/64K MB/s=900.3
+round=1 op=decompress level=1 corpus=enwik8 build=zlib-turbo-1.0.1-simd-native mode=one-call MB/s=692.0
+round=1 op=decompress level=1 corpus=enwik8 build=zlib-turbo-1.0.1-simd-native mode=16K/64K MB/s=563.3
+round=1 op=decompress level=6 corpus=enwik8 build=zlib-turbo-1.0.1-simd-native mode=one-call MB/s=715.0
+round=1 op=decompress level=6 corpus=enwik8 build=zlib-turbo-1.0.1-simd-native mode=16K/64K MB/s=602.2
+round=1 op=decompress level=9 corpus=enwik8 build=zlib-turbo-1.0.1-simd-native mode=one-call MB/s=717.5
+round=1 op=decompress level=9 corpus=enwik8 build=zlib-turbo-1.0.1-simd-native mode=16K/64K MB/s=603.2
+round=1 op=decompress level=1 corpus=silesia build=zlib-turbo-1.1.0-simd-native mode=one-call MB/s=805.0
+round=1 op=decompress level=1 corpus=silesia build=zlib-turbo-1.1.0-simd-native mode=16K/64K MB/s=715.7
+round=1 op=decompress level=6 corpus=silesia build=zlib-turbo-1.1.0-simd-native mode=one-call MB/s=880.7
+round=1 op=decompress level=6 corpus=silesia build=zlib-turbo-1.1.0-simd-native mode=16K/64K MB/s=793.0
+round=1 op=decompress level=9 corpus=silesia build=zlib-turbo-1.1.0-simd-native mode=one-call MB/s=888.9
+round=1 op=decompress level=9 corpus=silesia build=zlib-turbo-1.1.0-simd-native mode=16K/64K MB/s=797.9
+round=1 op=decompress level=1 corpus=canterbury+calgary build=zlib-turbo-1.1.0-simd-native mode=one-call MB/s=931.3
+round=1 op=decompress level=1 corpus=canterbury+calgary build=zlib-turbo-1.1.0-simd-native mode=16K/64K MB/s=805.0
+round=1 op=decompress level=6 corpus=canterbury+calgary build=zlib-turbo-1.1.0-simd-native mode=one-call MB/s=1068.8
+round=1 op=decompress level=6 corpus=canterbury+calgary build=zlib-turbo-1.1.0-simd-native mode=16K/64K MB/s=941.9
+round=1 op=decompress level=9 corpus=canterbury+calgary build=zlib-turbo-1.1.0-simd-native mode=one-call MB/s=1081.6
+round=1 op=decompress level=9 corpus=canterbury+calgary build=zlib-turbo-1.1.0-simd-native mode=16K/64K MB/s=949.9
+round=1 op=decompress level=1 corpus=enwik8 build=zlib-turbo-1.1.0-simd-native mode=one-call MB/s=707.3
+round=1 op=decompress level=1 corpus=enwik8 build=zlib-turbo-1.1.0-simd-native mode=16K/64K MB/s=596.3
+round=1 op=decompress level=6 corpus=enwik8 build=zlib-turbo-1.1.0-simd-native mode=one-call MB/s=724.9
+round=1 op=decompress level=6 corpus=enwik8 build=zlib-turbo-1.1.0-simd-native mode=16K/64K MB/s=637.5
+round=1 op=decompress level=9 corpus=enwik8 build=zlib-turbo-1.1.0-simd-native mode=one-call MB/s=726.5
+round=1 op=decompress level=9 corpus=enwik8 build=zlib-turbo-1.1.0-simd-native mode=16K/64K MB/s=645.1
+round=1 op=decompress level=1 corpus=silesia build=chromium-zlib-rabin-karp mode=one-call MB/s=828.1
+round=1 op=decompress level=1 corpus=silesia build=chromium-zlib-rabin-karp mode=16K/64K MB/s=747.9
+round=1 op=decompress level=6 corpus=silesia build=chromium-zlib-rabin-karp mode=one-call MB/s=870.1
+round=1 op=decompress level=6 corpus=silesia build=chromium-zlib-rabin-karp mode=16K/64K MB/s=793.9
+round=1 op=decompress level=9 corpus=silesia build=chromium-zlib-rabin-karp mode=one-call MB/s=880.0
+round=1 op=decompress level=9 corpus=silesia build=chromium-zlib-rabin-karp mode=16K/64K MB/s=798.0
+round=1 op=decompress level=1 corpus=canterbury+calgary build=chromium-zlib-rabin-karp mode=one-call MB/s=996.9
+round=1 op=decompress level=1 corpus=canterbury+calgary build=chromium-zlib-rabin-karp mode=16K/64K MB/s=889.1
+round=1 op=decompress level=6 corpus=canterbury+calgary build=chromium-zlib-rabin-karp mode=one-call MB/s=1083.0
+round=1 op=decompress level=6 corpus=canterbury+calgary build=chromium-zlib-rabin-karp mode=16K/64K MB/s=976.5
+round=1 op=decompress level=9 corpus=canterbury+calgary build=chromium-zlib-rabin-karp mode=one-call MB/s=1091.8
+round=1 op=decompress level=9 corpus=canterbury+calgary build=chromium-zlib-rabin-karp mode=16K/64K MB/s=985.7
+round=1 op=decompress level=1 corpus=enwik8 build=chromium-zlib-rabin-karp mode=one-call MB/s=732.7
+round=1 op=decompress level=1 corpus=enwik8 build=chromium-zlib-rabin-karp mode=16K/64K MB/s=645.7
+round=1 op=decompress level=6 corpus=enwik8 build=chromium-zlib-rabin-karp mode=one-call MB/s=710.6
+round=1 op=decompress level=6 corpus=enwik8 build=chromium-zlib-rabin-karp mode=16K/64K MB/s=638.9
+round=1 op=decompress level=9 corpus=enwik8 build=chromium-zlib-rabin-karp mode=one-call MB/s=711.5
+round=1 op=decompress level=9 corpus=enwik8 build=chromium-zlib-rabin-karp mode=16K/64K MB/s=639.2
+round=2 op=decompress level=1 corpus=silesia build=zlib-turbo-1.0.1 mode=one-call MB/s=680.4
+round=2 op=decompress level=1 corpus=silesia build=zlib-turbo-1.0.1 mode=16K/64K MB/s=591.6
+round=2 op=decompress level=6 corpus=silesia build=zlib-turbo-1.0.1 mode=one-call MB/s=738.2
+round=2 op=decompress level=6 corpus=silesia build=zlib-turbo-1.0.1 mode=16K/64K MB/s=649.5
+round=2 op=decompress level=9 corpus=silesia build=zlib-turbo-1.0.1 mode=one-call MB/s=744.2
+round=2 op=decompress level=9 corpus=silesia build=zlib-turbo-1.0.1 mode=16K/64K MB/s=650.6
+round=2 op=decompress level=1 corpus=canterbury+calgary build=zlib-turbo-1.0.1 mode=one-call MB/s=765.1
+round=2 op=decompress level=1 corpus=canterbury+calgary build=zlib-turbo-1.0.1 mode=16K/64K MB/s=658.5
+round=2 op=decompress level=6 corpus=canterbury+calgary build=zlib-turbo-1.0.1 mode=one-call MB/s=871.6
+round=2 op=decompress level=6 corpus=canterbury+calgary build=zlib-turbo-1.0.1 mode=16K/64K MB/s=753.6
+round=2 op=decompress level=9 corpus=canterbury+calgary build=zlib-turbo-1.0.1 mode=one-call MB/s=881.0
+round=2 op=decompress level=9 corpus=canterbury+calgary build=zlib-turbo-1.0.1 mode=16K/64K MB/s=757.7
+round=2 op=decompress level=1 corpus=enwik8 build=zlib-turbo-1.0.1 mode=one-call MB/s=603.3
+round=2 op=decompress level=1 corpus=enwik8 build=zlib-turbo-1.0.1 mode=16K/64K MB/s=498.9
+round=2 op=decompress level=6 corpus=enwik8 build=zlib-turbo-1.0.1 mode=one-call MB/s=620.4
+round=2 op=decompress level=6 corpus=enwik8 build=zlib-turbo-1.0.1 mode=16K/64K MB/s=528.3
+round=2 op=decompress level=9 corpus=enwik8 build=zlib-turbo-1.0.1 mode=one-call MB/s=622.0
+round=2 op=decompress level=9 corpus=enwik8 build=zlib-turbo-1.0.1 mode=16K/64K MB/s=527.7
+round=2 op=decompress level=1 corpus=silesia build=zlib-turbo-1.1.0 mode=one-call MB/s=707.1
+round=2 op=decompress level=1 corpus=silesia build=zlib-turbo-1.1.0 mode=16K/64K MB/s=627.5
+round=2 op=decompress level=6 corpus=silesia build=zlib-turbo-1.1.0 mode=one-call MB/s=760.5
+round=2 op=decompress level=6 corpus=silesia build=zlib-turbo-1.1.0 mode=16K/64K MB/s=684.7
+round=2 op=decompress level=9 corpus=silesia build=zlib-turbo-1.1.0 mode=one-call MB/s=766.5
+round=2 op=decompress level=9 corpus=silesia build=zlib-turbo-1.1.0 mode=16K/64K MB/s=686.5
+round=2 op=decompress level=1 corpus=canterbury+calgary build=zlib-turbo-1.1.0 mode=one-call MB/s=813.4
+round=2 op=decompress level=1 corpus=canterbury+calgary build=zlib-turbo-1.1.0 mode=16K/64K MB/s=705.0
+round=2 op=decompress level=6 corpus=canterbury+calgary build=zlib-turbo-1.1.0 mode=one-call MB/s=905.0
+round=2 op=decompress level=6 corpus=canterbury+calgary build=zlib-turbo-1.1.0 mode=16K/64K MB/s=801.1
+round=2 op=decompress level=9 corpus=canterbury+calgary build=zlib-turbo-1.1.0 mode=one-call MB/s=920.8
+round=2 op=decompress level=9 corpus=canterbury+calgary build=zlib-turbo-1.1.0 mode=16K/64K MB/s=808.7
+round=2 op=decompress level=1 corpus=enwik8 build=zlib-turbo-1.1.0 mode=one-call MB/s=636.1
+round=2 op=decompress level=1 corpus=enwik8 build=zlib-turbo-1.1.0 mode=16K/64K MB/s=536.4
+round=2 op=decompress level=6 corpus=enwik8 build=zlib-turbo-1.1.0 mode=one-call MB/s=640.6
+round=2 op=decompress level=6 corpus=enwik8 build=zlib-turbo-1.1.0 mode=16K/64K MB/s=561.2
+round=2 op=decompress level=9 corpus=enwik8 build=zlib-turbo-1.1.0 mode=one-call MB/s=641.6
+round=2 op=decompress level=9 corpus=enwik8 build=zlib-turbo-1.1.0 mode=16K/64K MB/s=563.0
+round=2 op=decompress level=1 corpus=silesia build=zlib-turbo-1.0.1-simd-native mode=one-call MB/s=790.3
+round=2 op=decompress level=1 corpus=silesia build=zlib-turbo-1.0.1-simd-native mode=16K/64K MB/s=679.0
+round=2 op=decompress level=6 corpus=silesia build=zlib-turbo-1.0.1-simd-native mode=one-call MB/s=865.6
+round=2 op=decompress level=6 corpus=silesia build=zlib-turbo-1.0.1-simd-native mode=16K/64K MB/s=748.7
+round=2 op=decompress level=9 corpus=silesia build=zlib-turbo-1.0.1-simd-native mode=one-call MB/s=873.5
+round=2 op=decompress level=9 corpus=silesia build=zlib-turbo-1.0.1-simd-native mode=16K/64K MB/s=755.5
+round=2 op=decompress level=1 corpus=canterbury+calgary build=zlib-turbo-1.0.1-simd-native mode=one-call MB/s=906.8
+round=2 op=decompress level=1 corpus=canterbury+calgary build=zlib-turbo-1.0.1-simd-native mode=16K/64K MB/s=772.6
+round=2 op=decompress level=6 corpus=canterbury+calgary build=zlib-turbo-1.0.1-simd-native mode=one-call MB/s=1052.3
+round=2 op=decompress level=6 corpus=canterbury+calgary build=zlib-turbo-1.0.1-simd-native mode=16K/64K MB/s=892.4
+round=2 op=decompress level=9 corpus=canterbury+calgary build=zlib-turbo-1.0.1-simd-native mode=one-call MB/s=1063.2
+round=2 op=decompress level=9 corpus=canterbury+calgary build=zlib-turbo-1.0.1-simd-native mode=16K/64K MB/s=900.1
+round=2 op=decompress level=1 corpus=enwik8 build=zlib-turbo-1.0.1-simd-native mode=one-call MB/s=691.4
+round=2 op=decompress level=1 corpus=enwik8 build=zlib-turbo-1.0.1-simd-native mode=16K/64K MB/s=563.4
+round=2 op=decompress level=6 corpus=enwik8 build=zlib-turbo-1.0.1-simd-native mode=one-call MB/s=715.2
+round=2 op=decompress level=6 corpus=enwik8 build=zlib-turbo-1.0.1-simd-native mode=16K/64K MB/s=604.9
+round=2 op=decompress level=9 corpus=enwik8 build=zlib-turbo-1.0.1-simd-native mode=one-call MB/s=716.7
+round=2 op=decompress level=9 corpus=enwik8 build=zlib-turbo-1.0.1-simd-native mode=16K/64K MB/s=602.6
+round=2 op=decompress level=1 corpus=silesia build=zlib-turbo-1.1.0-simd-native mode=one-call MB/s=805.3
+round=2 op=decompress level=1 corpus=silesia build=zlib-turbo-1.1.0-simd-native mode=16K/64K MB/s=715.6
+round=2 op=decompress level=6 corpus=silesia build=zlib-turbo-1.1.0-simd-native mode=one-call MB/s=880.6
+round=2 op=decompress level=6 corpus=silesia build=zlib-turbo-1.1.0-simd-native mode=16K/64K MB/s=789.7
+round=2 op=decompress level=9 corpus=silesia build=zlib-turbo-1.1.0-simd-native mode=one-call MB/s=888.7
+round=2 op=decompress level=9 corpus=silesia build=zlib-turbo-1.1.0-simd-native mode=16K/64K MB/s=799.0
+round=2 op=decompress level=1 corpus=canterbury+calgary build=zlib-turbo-1.1.0-simd-native mode=one-call MB/s=928.3
+round=2 op=decompress level=1 corpus=canterbury+calgary build=zlib-turbo-1.1.0-simd-native mode=16K/64K MB/s=804.8
+round=2 op=decompress level=6 corpus=canterbury+calgary build=zlib-turbo-1.1.0-simd-native mode=one-call MB/s=1067.2
+round=2 op=decompress level=6 corpus=canterbury+calgary build=zlib-turbo-1.1.0-simd-native mode=16K/64K MB/s=939.0
+round=2 op=decompress level=9 corpus=canterbury+calgary build=zlib-turbo-1.1.0-simd-native mode=one-call MB/s=1081.5
+round=2 op=decompress level=9 corpus=canterbury+calgary build=zlib-turbo-1.1.0-simd-native mode=16K/64K MB/s=948.2
+round=2 op=decompress level=1 corpus=enwik8 build=zlib-turbo-1.1.0-simd-native mode=one-call MB/s=707.7
+round=2 op=decompress level=1 corpus=enwik8 build=zlib-turbo-1.1.0-simd-native mode=16K/64K MB/s=596.5
+round=2 op=decompress level=6 corpus=enwik8 build=zlib-turbo-1.1.0-simd-native mode=one-call MB/s=725.3
+round=2 op=decompress level=6 corpus=enwik8 build=zlib-turbo-1.1.0-simd-native mode=16K/64K MB/s=637.8
+round=2 op=decompress level=9 corpus=enwik8 build=zlib-turbo-1.1.0-simd-native mode=one-call MB/s=726.7
+round=2 op=decompress level=9 corpus=enwik8 build=zlib-turbo-1.1.0-simd-native mode=16K/64K MB/s=645.1
+round=2 op=decompress level=1 corpus=silesia build=chromium-zlib-rabin-karp mode=one-call MB/s=827.8
+round=2 op=decompress level=1 corpus=silesia build=chromium-zlib-rabin-karp mode=16K/64K MB/s=747.7
+round=2 op=decompress level=6 corpus=silesia build=chromium-zlib-rabin-karp mode=one-call MB/s=872.1
+round=2 op=decompress level=6 corpus=silesia build=chromium-zlib-rabin-karp mode=16K/64K MB/s=792.3
+round=2 op=decompress level=9 corpus=silesia build=chromium-zlib-rabin-karp mode=one-call MB/s=879.4
+round=2 op=decompress level=9 corpus=silesia build=chromium-zlib-rabin-karp mode=16K/64K MB/s=797.2
+round=2 op=decompress level=1 corpus=canterbury+calgary build=chromium-zlib-rabin-karp mode=one-call MB/s=996.2
+round=2 op=decompress level=1 corpus=canterbury+calgary build=chromium-zlib-rabin-karp mode=16K/64K MB/s=890.1
+round=2 op=decompress level=6 corpus=canterbury+calgary build=chromium-zlib-rabin-karp mode=one-call MB/s=1082.1
+round=2 op=decompress level=6 corpus=canterbury+calgary build=chromium-zlib-rabin-karp mode=16K/64K MB/s=975.4
+round=2 op=decompress level=9 corpus=canterbury+calgary build=chromium-zlib-rabin-karp mode=one-call MB/s=1091.9
+round=2 op=decompress level=9 corpus=canterbury+calgary build=chromium-zlib-rabin-karp mode=16K/64K MB/s=984.8
+round=2 op=decompress level=1 corpus=enwik8 build=chromium-zlib-rabin-karp mode=one-call MB/s=732.6
+round=2 op=decompress level=1 corpus=enwik8 build=chromium-zlib-rabin-karp mode=16K/64K MB/s=643.4
+round=2 op=decompress level=6 corpus=enwik8 build=chromium-zlib-rabin-karp mode=one-call MB/s=710.0
+round=2 op=decompress level=6 corpus=enwik8 build=chromium-zlib-rabin-karp mode=16K/64K MB/s=638.6
+round=2 op=decompress level=9 corpus=enwik8 build=chromium-zlib-rabin-karp mode=one-call MB/s=710.7
+round=2 op=decompress level=9 corpus=enwik8 build=chromium-zlib-rabin-karp mode=16K/64K MB/s=638.3

@@ -8,15 +8,16 @@ compressed stream stays as it is in zlib 1.3.2:
 - where blocks end;
 - how Huffman trees are built.
 
-The first six changes are in how bits are read and written, how bytes are compared and copied, and how a checksum is
-summed. The seventh lets worker threads find zlib's matches ahead of its parse and write its blocks, while the parse
-itself stays zlib's. The eighth adds levels 10 to 12, the one place with output of its own, and the ninth, optional,
-computes the checksums with SIMD instructions. Apart from the threads, none of the techniques is new: libdeflate,
-Zstandard, WZIP and others use them, and the sections below name the ones borrowed. The work was fitting them into
-zlib so that not one output byte, return code or error message changes, in any build configuration, and checking
-that by comparing with unmodified zlib (see [How it was tested](../README.md#how-it-was-tested)).
+The first seven changes are in how bits are read and written, how bytes are compared and copied, how a checksum is
+summed and where the compression loops keep their state. The eighth lets worker threads find zlib's matches ahead of
+its parse and write its blocks, while the parse itself stays zlib's. The ninth adds levels 10 to 12, the one place
+with output of its own, and the tenth, optional, computes the checksums with SIMD instructions. Apart from the
+threads, none of the techniques is new: libdeflate, Zstandard, WZIP, Chromium's zlib and others use them, and the
+sections below name the ones borrowed. The work was fitting them into zlib so that not one output byte, return code
+or error message changes, in any build configuration, and checking that by comparing with unmodified zlib (see
+[How it was tested](../README.md#how-it-was-tested)).
 
-All measurements here, except those with threads in section 7, are on one core of an AMD EPYC 9334 (Zen 4, 2.7 GHz),
+All measurements here, except those with threads in section 8, are on one core of an AMD EPYC 9334 (Zen 4, 2.7 GHz),
 GCC 14.2 `-O2`, best of two runs. They cover Silesia, Canterbury + Calgary and enwik8, each file compressed whole.
 Speeds are MB/s of uncompressed data.
 
@@ -32,13 +33,16 @@ Each row adds one commit to the row above it.
 | + 3. match comparisons | 123 (**+7%**) | 34.3 (**+7%**) | 13.9 (**+7%**) |  |
 | + 4. bit writer | 134 (**+9%**) | 35.0 (**+2%**) | 14.0 |  |
 | + 5. hash-table slide | 151 (**+13%**) | 36.0 (**+3%**) | 14.2 | 738 |
-| + 1. lookups before refills (1.0.2) |  |  |  | 752 (**+2%**) |
+| + 1. lookups before refills (1.1.0) |  |  |  | 752 (**+2%**) |
+| + 1. window copies inline (1.1.0) |  |  |  | 756 (**+0.5%**) |
+| + 6. compression loops (1.1.0) | 165 (**+9%**) | 37.3 (**+4%**) | 14.4 (**+1%**) |  |
 
 The table is for Silesia; Canterbury + Calgary and enwik8 show the same pattern. Changes 3 to 5 leave
-decompression as it is (row 5, within 0.3%). The last row, from version 1.0.2, reorders the decoder's loop
-(section 1) and leaves compression as it is. All runs, for the three corpora:
-[`results/steps_epyc9334.txt`](results/steps_epyc9334.txt); the last row:
-[`results/speed_epyc9334.txt`](results/speed_epyc9334.txt).
+decompression as it is (row 5, within 0.3%). The last three rows are version 1.1.0: the decoder's loop reordered
+and its window copies inline (section 1), which leave compression as it is, and the compression loops (section 6),
+which leave decompression as it is; window copies gain more in 16 KiB / 64 KiB pieces and on the smaller files of
+Canterbury + Calgary. All runs, for the three corpora: [`results/steps_epyc9334.txt`](results/steps_epyc9334.txt);
+the last three rows: [`results/speed_epyc9334.txt`](results/speed_epyc9334.txt).
 
 ## 1. Decompression: a 64-bit bit buffer, larger tables and wide copies
 
@@ -68,7 +72,7 @@ unchanged, for the ends of the buffers.
   table. This is variant 4 of Fabian Giesen's [*Reading bits in far too many
   ways*](https://fgiesen.wordpress.com/2018/02/20/reading-bits-in-far-too-many-ways-part-2/), and libdeflate uses
   the same approach.
-- **Each lookup before the refill that follows it** (version 1.0.2). The loop indexes the decoding table with the
+- **Each lookup before the refill that follows it** (version 1.1.0). The loop indexes the decoding table with the
   bits left from the last refill, at least 21 (a first-level index needs 10), and refills after the lookup, so the
   table load and the input load run at once instead of one after the other. The instructions per decoded byte stay
   the same; decompression gains 1% to 2% in one `inflate()` call and 2% to 3.7% in 16 KiB / 64 KiB pieces, with
@@ -88,6 +92,11 @@ unchanged, for the ends of the buffers.
     right, and the next step overwrites the rest.
   - A copy may write up to 15 bytes past the end of the match. That is why the loop needs 258 + 15 bytes of space,
     and those bytes are overwritten by what follows.
+  - A match that reaches back past the output of the current `inflate()` call is copied from the sliding window
+    sixteen bytes a step, reading and writing nothing outside the bytes copied, instead of through `memcpy()`
+    with a short length (version 1.1.0). Both copy functions are forced inline: GCC 14 kept the match copy out of
+    line, a call per match. Decompression gains 0.4% to 5% in one call and 1.5% to 5.5% in 16 KiB / 64 KiB pieces
+    with `-O2`, and 0.5% to 2% and 2.4% to 5.5% with `-march=native`.
 
 **Why the results are the same.** The tables decode the same codes; only the split between first and second level
 differs. Every check runs at the same point with the same message:
@@ -105,10 +114,10 @@ zlib's loop does. It never reads past the input or writes past the output buffer
 where they are measured faster (GCC 11 `-m32`: +20% at level 6). On other 32-bit targets, such as 32-bit ARM,
 64-bit shifts take several instructions and no measurement was made, so inflate keeps zlib's own loop and 9- and
 6-bit tables there, as it does without a 64-bit integer type. `-DZ_INFLATE_FAST64=0` or `=1` overrides the choice
-(version 1.0.2).
+(version 1.1.0).
 
 This change is also offered to zlib as [pull request #793](https://github.com/madler/zlib/pull/793), without the
-lookups before refills of version 1.0.2.
+lookups before refills of version 1.1.0.
 
 ## 2. Adler-32, eight bytes per step
 
@@ -205,7 +214,44 @@ Compilers then process eight entries per instruction: GCC 12 or later at `-O2`, 
 `m >= w ? m - w : 0` on 16-bit values becomes a single saturating subtraction, `psubusw`. The values are the same.
 GCC 11 does not vectorize loops at `-O2`, so with it the slide stays scalar.
 
-## 6. Prepared dictionaries
+## 6. The compression loops: their state in registers
+
+*`deflate.c`, `deflate.h`, `trees.c`, `trees.h`* (version 1.1.0)
+
+**What zlib does.** `deflate_fast()` (levels 1 to 3) and `deflate_slow()` (levels 4 to 9) keep the position, the
+lookahead, the running hash and the match state in the stream state, and each literal or match goes into the symbol
+buffer as three byte stores. A byte store may change any field of the state, as far as the compiler knows, so it
+stores and reloads every field at every position: GCC compiles `s->strstart++` to an add in memory and reads
+the field back at the top of the loop, which puts a store-to-load delay on each position.
+
+**What zlib-turbo does.**
+
+- `deflate_fast()` and `deflate_slow()` keep those values in local variables. They are stored in the state only
+  before a call that reads them (`longest_match()`, `fill_window()`, a block flush, the thread helpers) and when the
+  function returns, and read back after a call that may change them. `_tr_tally_lit()` and `_tr_tally_dist()` read
+  the symbol buffer's pointer and index once and write the index once.
+- While the string at one position is searched, the hash table entry of the next position is looked up and the
+  window at the string it names is prefetched (`__builtin_prefetch()`, GCC and clang), so that the next insertion
+  and the first candidate of the next search find them in cache. It is the decoder's idea (section 1) on the other
+  side: start the next lookup before the work that would wait for it.
+- `compress_block()` sends the extra length and distance bits without a branch. A code without extra bits stands
+  for a single length or distance, so it sends the value 0 in 0 bits. For that, `base_length[]` gives length 258
+  (code 285) the base 255 instead of 0, an entry zlib's code never reads.
+- `pqdownheap()`, which builds each block's Huffman trees, keeps the heap and its length in locals and compares
+  frequency × 256 + depth in one comparison, which orders the nodes exactly as zlib's `smaller()` does.
+
+**What it gives.** Against version 1.0.1 on the same nodes, on Silesia, Canterbury + Calgary and enwik8: 7% to 10%
+faster at level 1, 4% to 6% at level 3, 7% to 9% at level 4, 3% to 4% at level 6 and 1% to 2% at level 9. The
+locals give most of it: `deflate_fast()`'s about 4% at level 1, `deflate_slow()`'s 5% to 6% at level 4 and 1.5% to
+2% at level 6. The tally macros add 1.3% to 2.3% at level 1, the prefetch 0.3% to 1.6% at levels 1 to 9, and the
+extra bits and the heap up to 0.6% and 0.3% on their own, more together with the rest. Level 9 gains least, as
+`longest_match()` takes 90% of its time.
+
+**Why the output is the same.** The same operations run in the same order on the same values; only where the values
+live changes, and a prefetch is only a hint. The compressed bytes are the same as zlib's at levels 0 to 9, with and
+without threads, and as before at levels 10 to 12.
+
+## 7. Prepared dictionaries
 
 *`deflate.c`, new header `zturbo.h`*
 
@@ -241,7 +287,7 @@ and the same return value:
 **Why only compression.** `inflateSetDictionary()` only copies the dictionary into the window and builds no index,
 so decompression needs nothing new.
 
-## 7. Multithreaded compression
+## 8. Multithreaded compression
 
 *`deflate.c`, `trees.c`, `zturbo.h`; `deflateSetThreads()`*
 
@@ -286,8 +332,8 @@ on one 32-core socket, the median of three nodes:
 
 | | 1 thread | 3 | 4 | 8 | 16 | 24 |
 |---|---:|---:|---:|---:|---:|---:|
-| Level 6 | 35.8 / 27.1 | 64 / 51 | 92 / 76 | 166 / 172 | 183 / 207 | 161 / 193 |
-| Level 9 | 14.2 / 20.7 | 26 / 40 | 38 / 59 | 75 / 135 | 115 / 209 | 114 / 201 |
+| Level 6 | 37.1 / 27.9 | 63 / 51 | 91 / 76 | 164 / 170 | 181 / 205 | 166 / 195 |
+| Level 9 | 14.3 / 21.1 | 26 / 40 | 38 / 59 | 75 / 132 | 109 / 214 | 112 / 201 |
 
 A single worker gains nothing: the calling thread then searches the chunks the worker has not reached itself, on
 top of its parse, and was 3% to 15% slower than with no worker at levels 6 and 9. So two threads run as one, and
@@ -297,7 +343,7 @@ about 210 MB/s, spending its time choosing matches in zlib's order, which no
 thread can do ahead. At level 9 on Silesia the workers are the limit, as long chains there take many steps per
 position.
 
-## 8. Levels 10 to 12
+## 9. Levels 10 to 12
 
 *`deflate.c` (`deflate_opt()` and the `opt_` functions), `zturbo.h`*
 
@@ -337,7 +383,7 @@ with the code length code's own costs, three rounds.
 is 0.2% smaller than Zopfli on Silesia and 0.1% to 0.2% larger on the other two, 6 to 11 times as fast. Level 10, at
 5.5 MB/s, is as small as libdeflate's level 12 on Silesia. Table in the [README](../README.md#levels-10-to-12).
 
-## 9. SIMD checksums, optional
+## 10. SIMD checksums, optional
 
 *`crc32.c`, `adler32.c`; `configure --simd`, CMake `ZLIB_TURBO_SIMD`, or `-DZ_TURBO_SIMD` with the target flags*
 
@@ -349,19 +395,19 @@ an eighth of zlib-format decompression. Both are fixed functions of the bytes, s
 Computation for Generic Polynomials Using PCLMULQDQ Instruction": four 16-byte lanes are each folded 64 bytes ahead
 with the constants x^544 and x^480 modulo the polynomial, then into one lane, then 16 bytes at a time, and a
 Barrett reduction gives the 32-bit CRC. Inputs of 64 bytes or more take this path; the last 0 to 15 bytes and short
-inputs take zlib's braided code. 15.3 GB/s instead of 2.77.
+inputs take zlib's braided code. 15.5 GB/s instead of 2.77.
 
 **Adler-32.** AVX2 adds 32 bytes per step: `vpsadbw` sums the bytes into `a`, and `vpmaddubsw` with the weights
 32 to 1 into `sum`, with `a` from the steps before added 32 times by a running sum of the lanes. The lanes are
 added up and reduced modulo 65521 every 5536 bytes, the largest stretch whose sums fit 32 bits when every byte is
-255, including the 32-bit `unsigned long` of 64-bit Windows. 41 GB/s instead of 5.5.
+255, including the 32-bit `unsigned long` of 64-bit Windows. 43 GB/s instead of 5.6.
 
 **Why opt-in.** Without run-time CPU detection, which zlib-turbo does not do, a library built with these
 instructions fails on processors without them. Distributions build for a baseline that lacks AVX2; people who build
 for their own machines, or for x86-64-v3, can turn them on. The default build stays plain C.
 
-**What it gives.** Decompression, level 6 streams in one call: gzip +20% to +28%, zlib +11% to +16% over zlib-turbo
-without SIMD, and +91% to +114% over zlib 1.3.2. Compression gains 1% to 5%, most at level 1 with gzip. Table in
+**What it gives.** Decompression, level 6 streams in one call: gzip +21% to +29%, zlib +11% to +16% over zlib-turbo
+without SIMD, and +98% to +128% over zlib 1.3.2. Compression gains 0.5% to 6%, most at level 1 with gzip. Table in
 the [README](../README.md#simd-checksums-optional).
 
 ## What was tried and dropped
@@ -375,6 +421,7 @@ Each was kept only if it was faster (for levels 10 to 12: smaller) without being
 | Check the eight bytes that end at the best length, not two | Zstandard's hash-chain search | -5% to -7% at level 1, -2% at level 3, within 1% at levels 6 and 9 |
 | Hash each position from its three bytes in the insertion loops, instead of rolling the hash | Zstandard | within 0.7% |
 | Write a whole length/distance pair into the bit buffer at once | Zstandard's combined codes | -2% to +0.6% |
+| Store the bit buffer only when the next symbol might not fit, instead of after every symbol | common in bit writers | -0.8% to -1.8% at level 1: the branch costs more than the stores it saves |
 | Copy short-distance matches as Zstandard does (`ZSTD_overlapCopy8`) | Zstandard | decompression -0.2% to -1.3% |
 | Copy 32 bytes per step after the first 16 | Zstandard's copy loop | within 0.7% |
 | Copy short-distance matches sixteen bytes a step, doubling the repeating pattern until it spans sixteen | Chromium's zlib (`chunkcopy.h`) | -0.3% to -0.8% in one call, -1.3% to -3% with `-march=native` (measured with the next change, which alone does not touch one-call decoding) |
@@ -395,7 +442,7 @@ Each was kept only if it was faster (for levels 10 to 12: smaller) without being
 Compression and decompression speed on Silesia, Canterbury + Calgary and enwik8 as above, each against the version
 kept.
 
-**Against Chromium's zlib.** Built with `USE_ZLIB_RABIN_KARP_HASH`, it writes zlib's bytes. Before version 1.0.2 it
+**Against Chromium's zlib.** Built with `USE_ZLIB_RABIN_KARP_HASH`, it writes zlib's bytes. Before version 1.1.0 it
 decompressed up to 11% faster in one call and 5% to 15% faster in pieces than zlib-turbo with SIMD checksums. A
 sampling profile showed the two spending their time in the same places in the same proportions: match copies 16% to
 24%, distance lookups 8% to 12%, decoding tables 2% to 5%, Adler-32 2% to 3%. valgrind counted the same instructions
@@ -403,9 +450,10 @@ per decoded byte within 3% (level 1, Canterbury + Calgary in one call: 13.45 aga
 pieces: 13.84 against 13.90) and about the same simulated branch mispredictions. Chromium's loop ran 10% to 14% more
 instructions per cycle where it led, so the difference was in the order of the instructions, not their number. The
 three copy changes above did not explain it; Chromium's commit 456ae73, which moved each refill after the table
-lookup, did, and version 1.0.2 does the same (section 1). Chromium's zlib now decompresses from 2% slower to 9%
-faster in one call (faster at level 1) and 2% to 13% faster in pieces (README, "Speed"). Counts and speeds before
-1.0.2: [`results/chromium_compare_epyc9334.txt`](results/chromium_compare_epyc9334.txt).
+lookup, did, and version 1.1.0 does the same (section 1). With the window copies of 1.1.0 too,
+Chromium's zlib now decompresses from 2% slower to 7% faster in one call (faster at level 1) and from 1% slower to
+10% faster in pieces (README, "Speed"). Counts and speeds before
+1.1.0: [`results/chromium_compare_epyc9334.txt`](results/chromium_compare_epyc9334.txt).
 
 ## What is not changed, and why
 
@@ -422,7 +470,7 @@ that of levels 10 to 12, which zlib does not have; a faster but different compre
 an option, never as the default.
 
 **SIMD code, assembly and run-time CPU detection.** The default build has none of them; the SIMD checksums
-(change 9) come only when the build asks for them, and nothing detects the CPU at run time. More of it would make
+(change 10) come only when the build asks for them, and nothing detects the CPU at run time. More of it would make
 the code larger, harder to review and harder to port, which is the opposite of what a drop-in zlib needs. The only
 compiler-specific code is the count-trailing-zeros call in change 3, and it has a portable fallback. Compilers
 targeting newer CPUs generate better code from the same source anyway: built with `-march=x86-64-v3` (AVX2, BMI2),

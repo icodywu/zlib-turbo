@@ -6,7 +6,7 @@
 # two rounds. Counts: one decode of every file (dec1.c, as zbench decodes), valgrind 3.18 callgrind --branch-sim=yes,
 # counted inside inflate() only: instructions (Ir), conditional branches (Bc), simulated mispredictions (Bcm).
 # ipb = instructions per decoded byte; ipc = ipb * MB/s / 2700, assuming the 2.7 GHz clock.
-# Measured before zlib-turbo 1.0.2, which adopts the instruction order that explains the difference (each code
+# Measured before zlib-turbo 1.1.0, which adopts the instruction order that explains the difference (each code
 # looked up before the refill that follows it, as in Chromium's commit 456ae73).
 canterbury+calgary L1 one-call   build=chromium-zlib-rabin-karp-v3  MB/s= 1035.0 Ir=82425979 Bc=9006664 Bcm=432899 ipb=13.65 ipc=5.23
 enwik8 L1 16K/64K                build=chromium-zlib-rabin-karp-v3  MB/s=  641.6 Ir=1722926089 Bc=268221942 Bcm=11006509 ipb=17.23 ipc=4.09

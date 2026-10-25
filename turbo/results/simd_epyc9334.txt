@@ -183,3 +183,163 @@ C r2 zlib L6 E turbo TOTAL L6 ratio 2.7361 comp 27.21 MB/s hash ddb1c54c4c6e39ba
 C r2 gzip L6 E turbo TOTAL L6 ratio 2.7361 comp 27.01 MB/s hash 9664e32260bc98ef
 C r2 zlib L6 E simd TOTAL L6 ratio 2.7361 comp 27.43 MB/s hash ddb1c54c4c6e39ba
 C r2 gzip L6 E simd TOTAL L6 ratio 2.7361 comp 27.41 MB/s hash 9664e32260bc98ef
+
+zlib-turbo 1.1.0 (the release), measured again the same way on one node (auh7-3b-gpu-047), 2026-10-25: the README's
+SIMD table comes from this section. The checksums are unchanged in 1.1.0; decompression and compression are faster.
+
+checksums, GB/s (crc32 whole, in 16 KiB pieces; adler32 whole, in pieces)
+  st132     2.77    2.72    3.88    3.87
+  turbo     2.76    2.72    5.56    5.54
+  simd     15.46   15.46   43.02   42.94
+
+decompression MB/s: stock / turbo / turbo+SIMD   (+% SIMD over turbo, +% over stock)
+  zlib m0 S     437.5   757.3   864.1   +14.1%  +97.5%
+  zlib m0 CC    468.2   919.7  1068.4   +16.2% +128.2%
+  zlib m0 E     349.5   639.9   710.9   +11.1% +103.4%
+  zlib m1 S     408.8   681.3   766.1   +12.4%  +87.4%
+  zlib m1 CC    436.4   805.7   918.6   +14.0% +110.5%
+  zlib m1 E     325.0   556.1   617.7   +11.1%  +90.1%
+  gzip m0 S     418.5   665.6   833.7   +25.3%  +99.2%
+  gzip m0 CC    446.0   787.9  1017.8   +29.2% +128.2%
+  gzip m0 E     336.5   571.3   691.9   +21.1% +105.6%
+  gzip m1 S     391.7   606.2   740.9   +22.2%  +89.1%
+  gzip m1 CC    416.1   698.3   886.2   +26.9% +113.0%
+  gzip m1 E     314.4   504.5   600.4   +19.0%  +91.0%
+
+compression MB/s: stock / turbo / turbo+SIMD   (output identical in all three)
+  zlib L1 S    114.2   165.6   171.5   +3.6%  same
+  zlib L1 E     99.1   148.0   152.5   +3.1%  same
+  zlib L6 S     31.9    37.3    37.6   +0.9%  same
+  zlib L6 E     24.3    28.0    28.1   +0.5%  same
+  gzip L1 S    112.8   160.6   170.0   +5.9%  same
+  gzip L1 E     98.4   144.1   151.1   +4.9%  same
+  gzip L6 S     31.8    37.1    37.6   +1.3%  same
+  gzip L6 E     24.3    27.9    28.1   +0.9%  same
+
+Raw (1.1.0):
+A r1 st132 crc32 2.77 GB/s whole, 2.72 GB/s in 16 KiB pieces; adler32 3.88 GB/s whole, 3.87 GB/s in pieces (0)
+A r1 turbo crc32 2.76 GB/s whole, 2.72 GB/s in 16 KiB pieces; adler32 5.55 GB/s whole, 5.54 GB/s in pieces (0)
+A r1 simd crc32 15.46 GB/s whole, 15.44 GB/s in 16 KiB pieces; adler32 42.58 GB/s whole, 42.72 GB/s in pieces (0)
+D r1 zlib S st132 m0 437.5
+D r1 zlib S st132 m1 408.8
+D r1 zlib S turbo m0 756.8
+D r1 zlib S turbo m1 681.3
+D r1 zlib S simd m0 863.9
+D r1 zlib S simd m1 766.1
+D r1 zlib CC st132 m0 467.9
+D r1 zlib CC st132 m1 435.9
+D r1 zlib CC turbo m0 913.0
+D r1 zlib CC turbo m1 805.7
+D r1 zlib CC simd m0 1068.4
+D r1 zlib CC simd m1 916.4
+D r1 zlib E st132 m0 349.4
+D r1 zlib E st132 m1 325.0
+D r1 zlib E turbo m0 639.7
+D r1 zlib E turbo m1 556.1
+D r1 zlib E simd m0 710.7
+D r1 zlib E simd m1 617.7
+D r1 gzip S st132 m0 418.5
+D r1 gzip S st132 m1 388.8
+D r1 gzip S turbo m0 665.6
+D r1 gzip S turbo m1 606.2
+D r1 gzip S simd m0 833.7
+D r1 gzip S simd m1 736.3
+D r1 gzip CC st132 m0 446.0
+D r1 gzip CC st132 m1 416.1
+D r1 gzip CC turbo m0 781.2
+D r1 gzip CC turbo m1 698.3
+D r1 gzip CC simd m0 1017.8
+D r1 gzip CC simd m1 886.2
+D r1 gzip E st132 m0 336.4
+D r1 gzip E st132 m1 314.3
+D r1 gzip E turbo m0 571.3
+D r1 gzip E turbo m1 504.5
+D r1 gzip E simd m0 691.4
+D r1 gzip E simd m1 599.6
+C r1 zlib L1 S st132 TOTAL L1 ratio 2.7437 comp 114.15 MB/s hash af77fc6eb7e84ea4
+C r1 gzip L1 S st132 TOTAL L1 ratio 2.7436 comp 112.75 MB/s hash c5945fee9759be18
+C r1 zlib L1 S turbo TOTAL L1 ratio 2.7437 comp 165.47 MB/s hash af77fc6eb7e84ea4
+C r1 gzip L1 S turbo TOTAL L1 ratio 2.7436 comp 160.58 MB/s hash c5945fee9759be18
+C r1 zlib L1 S simd TOTAL L1 ratio 2.7437 comp 171.48 MB/s hash af77fc6eb7e84ea4
+C r1 gzip L1 S simd TOTAL L1 ratio 2.7436 comp 170.01 MB/s hash c5945fee9759be18
+C r1 zlib L1 E st132 TOTAL L1 ratio 2.3641 comp 99.09 MB/s hash da416787a9a43510
+C r1 gzip L1 E st132 TOTAL L1 ratio 2.3641 comp 98.42 MB/s hash c3339b80237bcb30
+C r1 zlib L1 E turbo TOTAL L1 ratio 2.3641 comp 147.82 MB/s hash da416787a9a43510
+C r1 gzip L1 E turbo TOTAL L1 ratio 2.3641 comp 143.74 MB/s hash c3339b80237bcb30
+C r1 zlib L1 E simd TOTAL L1 ratio 2.3641 comp 152.48 MB/s hash da416787a9a43510
+C r1 gzip L1 E simd TOTAL L1 ratio 2.3641 comp 151.06 MB/s hash c3339b80237bcb30
+C r1 zlib L6 S st132 TOTAL L6 ratio 3.1067 comp 31.91 MB/s hash 834d090df99d0211
+C r1 gzip L6 S st132 TOTAL L6 ratio 3.1067 comp 31.82 MB/s hash 37c0b38b97e18c55
+C r1 zlib L6 S turbo TOTAL L6 ratio 3.1067 comp 37.33 MB/s hash 834d090df99d0211
+C r1 gzip L6 S turbo TOTAL L6 ratio 3.1067 comp 37.08 MB/s hash 37c0b38b97e18c55
+C r1 zlib L6 S simd TOTAL L6 ratio 3.1067 comp 37.65 MB/s hash 834d090df99d0211
+C r1 gzip L6 S simd TOTAL L6 ratio 3.1067 comp 37.61 MB/s hash 37c0b38b97e18c55
+C r1 zlib L6 E st132 TOTAL L6 ratio 2.7361 comp 24.30 MB/s hash ddb1c54c4c6e39ba
+C r1 gzip L6 E st132 TOTAL L6 ratio 2.7361 comp 24.24 MB/s hash 9664e32260bc98ef
+C r1 zlib L6 E turbo TOTAL L6 ratio 2.7361 comp 28.00 MB/s hash ddb1c54c4c6e39ba
+C r1 gzip L6 E turbo TOTAL L6 ratio 2.7361 comp 27.85 MB/s hash 9664e32260bc98ef
+C r1 zlib L6 E simd TOTAL L6 ratio 2.7361 comp 28.14 MB/s hash ddb1c54c4c6e39ba
+C r1 gzip L6 E simd TOTAL L6 ratio 2.7361 comp 28.11 MB/s hash 9664e32260bc98ef
+A r2 st132 crc32 2.77 GB/s whole, 2.71 GB/s in 16 KiB pieces; adler32 3.88 GB/s whole, 3.87 GB/s in pieces (0)
+A r2 turbo crc32 2.76 GB/s whole, 2.71 GB/s in 16 KiB pieces; adler32 5.56 GB/s whole, 5.54 GB/s in pieces (0)
+A r2 simd crc32 15.45 GB/s whole, 15.46 GB/s in 16 KiB pieces; adler32 43.02 GB/s whole, 42.94 GB/s in pieces (0)
+D r2 zlib S st132 m0 437.5
+D r2 zlib S st132 m1 408.5
+D r2 zlib S turbo m0 757.3
+D r2 zlib S turbo m1 680.5
+D r2 zlib S simd m0 864.1
+D r2 zlib S simd m1 765.1
+D r2 zlib CC st132 m0 468.2
+D r2 zlib CC st132 m1 436.4
+D r2 zlib CC turbo m0 919.7
+D r2 zlib CC turbo m1 804.1
+D r2 zlib CC simd m0 1064.0
+D r2 zlib CC simd m1 918.6
+D r2 zlib E st132 m0 349.5
+D r2 zlib E st132 m1 324.8
+D r2 zlib E turbo m0 639.9
+D r2 zlib E turbo m1 555.6
+D r2 zlib E simd m0 710.9
+D r2 zlib E simd m1 616.8
+D r2 gzip S st132 m0 412.8
+D r2 gzip S st132 m1 391.7
+D r2 gzip S turbo m0 665.4
+D r2 gzip S turbo m1 605.4
+D r2 gzip S simd m0 833.7
+D r2 gzip S simd m1 740.9
+D r2 gzip CC st132 m0 445.4
+D r2 gzip CC st132 m1 414.8
+D r2 gzip CC turbo m0 787.9
+D r2 gzip CC turbo m1 697.9
+D r2 gzip CC simd m0 1016.5
+D r2 gzip CC simd m1 882.7
+D r2 gzip E st132 m0 336.5
+D r2 gzip E st132 m1 314.4
+D r2 gzip E turbo m0 570.4
+D r2 gzip E turbo m1 504.3
+D r2 gzip E simd m0 691.9
+D r2 gzip E simd m1 600.4
+C r2 zlib L1 S st132 TOTAL L1 ratio 2.7437 comp 114.21 MB/s hash af77fc6eb7e84ea4
+C r2 gzip L1 S st132 TOTAL L1 ratio 2.7436 comp 112.76 MB/s hash c5945fee9759be18
+C r2 zlib L1 S turbo TOTAL L1 ratio 2.7437 comp 165.56 MB/s hash af77fc6eb7e84ea4
+C r2 gzip L1 S turbo TOTAL L1 ratio 2.7436 comp 160.42 MB/s hash c5945fee9759be18
+C r2 zlib L1 S simd TOTAL L1 ratio 2.7437 comp 171.27 MB/s hash af77fc6eb7e84ea4
+C r2 gzip L1 S simd TOTAL L1 ratio 2.7436 comp 169.98 MB/s hash c5945fee9759be18
+C r2 zlib L1 E st132 TOTAL L1 ratio 2.3641 comp 98.23 MB/s hash da416787a9a43510
+C r2 gzip L1 E st132 TOTAL L1 ratio 2.3641 comp 98.00 MB/s hash c3339b80237bcb30
+C r2 zlib L1 E turbo TOTAL L1 ratio 2.3641 comp 147.96 MB/s hash da416787a9a43510
+C r2 gzip L1 E turbo TOTAL L1 ratio 2.3641 comp 144.06 MB/s hash c3339b80237bcb30
+C r2 zlib L1 E simd TOTAL L1 ratio 2.3641 comp 152.09 MB/s hash da416787a9a43510
+C r2 gzip L1 E simd TOTAL L1 ratio 2.3641 comp 150.59 MB/s hash c3339b80237bcb30
+C r2 zlib L6 S st132 TOTAL L6 ratio 3.1067 comp 31.87 MB/s hash 834d090df99d0211
+C r2 gzip L6 S st132 TOTAL L6 ratio 3.1067 comp 31.83 MB/s hash 37c0b38b97e18c55
+C r2 zlib L6 S turbo TOTAL L6 ratio 3.1067 comp 37.29 MB/s hash 834d090df99d0211
+C r2 gzip L6 S turbo TOTAL L6 ratio 3.1067 comp 37.12 MB/s hash 37c0b38b97e18c55
+C r2 zlib L6 S simd TOTAL L6 ratio 3.1067 comp 37.63 MB/s hash 834d090df99d0211
+C r2 gzip L6 S simd TOTAL L6 ratio 3.1067 comp 37.57 MB/s hash 37c0b38b97e18c55
+C r2 zlib L6 E st132 TOTAL L6 ratio 2.7361 comp 24.28 MB/s hash ddb1c54c4c6e39ba
+C r2 gzip L6 E st132 TOTAL L6 ratio 2.7361 comp 24.26 MB/s hash 9664e32260bc98ef
+C r2 zlib L6 E turbo TOTAL L6 ratio 2.7361 comp 27.99 MB/s hash ddb1c54c4c6e39ba
+C r2 gzip L6 E turbo TOTAL L6 ratio 2.7361 comp 27.82 MB/s hash 9664e32260bc98ef
+C r2 zlib L6 E simd TOTAL L6 ratio 2.7361 comp 28.13 MB/s hash ddb1c54c4c6e39ba
+C r2 gzip L6 E simd TOTAL L6 ratio 2.7361 comp 28.08 MB/s hash 9664e32260bc98ef
