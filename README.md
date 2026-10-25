@@ -112,7 +112,9 @@ output pieces
 | 9 | 442 → 758 (+72%) / 412 → 673 (+63%) | 473 → 882 (+87%) / 440 → 769 (+75%) | 350 → 628 (+80%) / 325 → 543 (+67%) |
 
 Other compilers, Silesia level 6, compression / decompression in one call: GCC 11 +11% / +76%, clang 18 +12% /
-+71%. On 32-bit x86, where 64-bit arithmetic is emulated, +5% / +20%.
++71%. On 32-bit x86, where 64-bit arithmetic is emulated, +5% / +20%. On other 32-bit targets, such as 32-bit ARM,
+which were not measured, decompression uses zlib's own code by default (see
+[Building and installing](#building-and-installing)).
 
 For context, zlib-ng 2.3.3 (compat mode, same machine and compiler) decompresses 15% to 22% faster than zlib-turbo,
 which reaches 82% to 87% of its speed without any SIMD code (the default build). zlib-ng compresses two to three times as fast, with
@@ -152,7 +154,8 @@ Nine changes to zlib 1.3.2:
 1. **Decompression: a 64-bit bit buffer and wide copies** (`inffast.c`). A new fast loop refills a 64-bit bit
    buffer eight bytes at a time, after each table lookup so that the two loads overlap, and copies matches 16 or 8
    bytes at a time. Larger first-level decoding tables (10 bits for literals and lengths, 8 for distances)
-   make second lookups rare. The existing loop finishes near the buffer ends exactly as before.
+   make second lookups rare. The existing loop finishes near the buffer ends exactly as before. Both are used on
+   64-bit targets and 32-bit x86; other 32-bit targets keep zlib's decoder by default.
 2. **Adler-32 eight bytes at a time** (`adler32.c`) on 64-bit targets: one multiplication sums eight bytes and two
    weight them, with a modulo only every 2^20 bytes. This speeds up both directions for the zlib format.
 3. **Match finding: two- and eight-byte comparisons** (`deflate.c`). Candidates are checked two bytes at a time and
@@ -317,7 +320,7 @@ Every test compares zlib-turbo with unmodified zlib 1.3.2, not only with expecte
 | Damaged streams | 34,860 corrupted streams (bit flips, overwritten bytes, truncations) in random input and output pieces: the same return code, output length and CRC as zlib for each. |
 | Valid streams | 2,809 checks over 11 compression settings, in one call, in random pieces each in a buffer of its own size, and with `inflateBack()`. |
 | Memory checkers | All of the above under AddressSanitizer and UndefinedBehaviorSanitizer, also built with `INFLATE_STRICT`, `INFLATE_ALLOW_INVALID_DISTANCE_TOOFAR_ARRR` and `PKZIP_BUG_WORKAROUND`. |
-| Architectures | The same results on x86-64, 32-bit x86, arm64, ARMv5, ppc64le and big-endian s390x (QEMU), also with the eight-byte Adler-32 forced on where it is off by default, and with MSVC 2022 on Windows. |
+| Architectures | The same results on x86-64, 32-bit x86, arm64, ARMv5, ARMv7, ppc64le, big-endian s390x and big-endian 32-bit MIPS (QEMU), on 32-bit ARM and MIPS with zlib's decoder (their default) and with the 64-bit loop forced on, also with the eight-byte Adler-32 forced on where it is off by default, and with MSVC 2022 on Windows. |
 | Differential fuzzing | libFuzzer against zlib 1.3.2. Decompression: 36 million runs under AddressSanitizer and 35 million under UndefinedBehaviorSanitizer. Compression, with all flush modes, `deflateParams()`, dictionaries set or prepared, `deflatePrime()` and `deflateReset()`: 5.7 million runs under AddressSanitizer and 2.8 million under UndefinedBehaviorSanitizer. No difference and no report. |
 | Dictionaries | 9,315 combinations of level, window, `memLevel`, strategy and dictionary length per test file: the same results from zlib's `deflateSetDictionary()` and from zlib-turbo's `deflateSetDictionary()` and `deflateUseDictionary()`. |
 | Streaming | With `Z_SYNC_FLUSH`, every byte before a flush point comes out as soon as its compressed bytes are in (43,815 messages). |
@@ -333,7 +336,9 @@ zlib's names (`libz.so.1`, `zlib1.dll`) and installs `zturbo.h` next to `zlib.h`
 linked with `-pthread` where that is needed; `./configure --no-threads` or CMake `-DZLIB_TURBO_THREADS=OFF` builds
 it without, and `deflateSetThreads()` then accepts only one thread. The files in `win32/` build without threads
 unless `-DZ_TURBO_THREADS` is added. `./configure --simd` or CMake `-DZLIB_TURBO_SIMD=ON` adds the SIMD checksums
-(x86 with AVX2 and PCLMULQDQ only); with the files in `win32/`, add `-DZ_TURBO_SIMD -arch:AVX2`.
+(x86 with AVX2 and PCLMULQDQ only); with the files in `win32/`, add `-DZ_TURBO_SIMD -arch:AVX2`. The 64-bit decoding
+loop is used on 64-bit targets and 32-bit x86; on other 32-bit targets inflate is zlib's own unless
+`-DZ_INFLATE_FAST64=1` is added (`-DZ_INFLATE_FAST64=0` turns it off anywhere).
 
 ## Reproducing the results
 

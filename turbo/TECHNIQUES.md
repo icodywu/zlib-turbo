@@ -99,8 +99,13 @@ differs. Every check runs at the same point with the same message:
 - the `INFLATE_ALLOW_INVALID_DISTANCE_TOOFAR_ARRR` zero fill.
 
 When the loop ends, it gives back the whole bytes it read ahead, leaving fewer than eight bits in the buffer as
-zlib's loop does. It never reads past the input or writes past the output buffer. Without a 64-bit integer type,
-the new loop is not compiled.
+zlib's loop does. It never reads past the input or writes past the output buffer.
+
+**Where it is used.** The new loop and its tables are compiled by default on 64-bit targets and on 32-bit x86,
+where they are measured faster (GCC 11 `-m32`: +20% at level 6). On other 32-bit targets, such as 32-bit ARM,
+64-bit shifts take several instructions and no measurement was made, so inflate keeps zlib's own loop and 9- and
+6-bit tables there, as it does without a 64-bit integer type. `-DZ_INFLATE_FAST64=0` or `=1` overrides the choice
+(version 1.0.2).
 
 This change is also offered to zlib as [pull request #793](https://github.com/madler/zlib/pull/793), without the
 lookups before refills of version 1.0.2.

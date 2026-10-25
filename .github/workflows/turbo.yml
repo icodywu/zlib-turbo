@@ -63,6 +63,8 @@ jobs:
         run: SAN=address,undefined sh turbo/tests/run_threads.sh . 3 ci/large/records ci/synthetic/mixed
       - name: Damaged streams, the same results as zlib (AddressSanitizer, UndefinedBehaviorSanitizer)
         run: sh turbo/tests/run_stress.sh ../zlib-1.3.2 . ci/synthetic
+      - name: The same with zlib's decoder, as on 32-bit ARM (Z_INFLATE_FAST64=0)
+        run: DEFS=-DZ_INFLATE_FAST64=0 WORK=./stress-work-0 sh turbo/tests/run_stress.sh ../zlib-1.3.2 . ci/synthetic
       - name: Levels 10 to 12 under AddressSanitizer and UndefinedBehaviorSanitizer
         run: SAN=address,undefined sh turbo/tests/run_opt.sh ../zlib-1.3.2 . ci/synthetic/mixed
 

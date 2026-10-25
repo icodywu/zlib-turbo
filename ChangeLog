@@ -7,6 +7,9 @@ Changes in zlib-turbo 1.0.2
   456ae73): decompression 1% to 2% faster in one inflate() call and 2% to 3.7%
   faster in 16 KiB / 64 KiB pieces (AMD EPYC 9334, GCC 14.2)
 - The fast loop starts with 24 bytes of input instead of 16
+- The fast loop and its 10/8-bit tables are used on 64-bit targets and 32-bit
+  x86; other 32-bit targets, such as 32-bit ARM, now keep zlib's decoder by
+  default; -DZ_INFLATE_FAST64=0 or =1 overrides the choice
 - Decompressed results, return values and messages unchanged; compression
   unchanged
 
