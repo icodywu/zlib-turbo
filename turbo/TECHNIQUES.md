@@ -32,10 +32,13 @@ Each row adds one commit to the row above it.
 | + 3. match comparisons | 123 (**+7%**) | 34.3 (**+7%**) | 13.9 (**+7%**) |  |
 | + 4. bit writer | 134 (**+9%**) | 35.0 (**+2%**) | 14.0 |  |
 | + 5. hash-table slide | 151 (**+13%**) | 36.0 (**+3%**) | 14.2 | 738 |
+| + 1. lookups before refills (1.0.2) |  |  |  | 752 (**+2%**) |
 
 The table is for Silesia; Canterbury + Calgary and enwik8 show the same pattern. Changes 3 to 5 leave
-decompression as it is (the last row, within 0.3%). All runs, for the three corpora:
-[`results/steps_epyc9334.txt`](results/steps_epyc9334.txt).
+decompression as it is (row 5, within 0.3%). The last row, from version 1.0.2, reorders the decoder's loop
+(section 1) and leaves compression as it is. All runs, for the three corpora:
+[`results/steps_epyc9334.txt`](results/steps_epyc9334.txt); the last row:
+[`results/speed_epyc9334.txt`](results/speed_epyc9334.txt).
 
 ## 1. Decompression: a 64-bit bit buffer, larger tables and wide copies
 
@@ -48,7 +51,8 @@ first-level table of 9 bits (literals and lengths) or 6 bits (distances). Longer
 match is copied three bytes per loop step.
 
 **What zlib-turbo does.** A new loop runs first, while at least 16 bytes of input and 273 bytes of output space
-remain. It hands over to zlib's original loop, unchanged, for the ends of the buffers.
+remain (it starts with 24 bytes of input, for one refill before it). It hands over to zlib's original loop,
+unchanged, for the ends of the buffers.
 
 - **Branch-free refill.** One unaligned eight-byte load fills the buffer:
 
@@ -58,11 +62,19 @@ remain. It hands over to zlib's original loop, unchanged, for the ends of the bu
   bits |= 56;
   ```
 
-  After a refill there are at least 56 bits. That covers a whole length/distance pair: at most 15 + 5 + 15 + 13 =
-  48 bits, so it decodes with no further checks. It also covers up to three literals found in the first-level
+  After a refill there are at least 56 bits. A length code and its extra bits take at most 15 + 5 = 20 bits and a
+  distance code and its extra bits at most 15 + 13 = 28, so a length/distance pair decodes with one refill after
+  each of its two lookups and no other checks. A refill also covers up to three literals found in the first-level
   table. This is variant 4 of Fabian Giesen's [*Reading bits in far too many
   ways*](https://fgiesen.wordpress.com/2018/02/20/reading-bits-in-far-too-many-ways-part-2/), and libdeflate uses
   the same approach.
+- **Each lookup before the refill that follows it** (version 1.0.2). The loop indexes the decoding table with the
+  bits left from the last refill, at least 21 (a first-level index needs 10), and refills after the lookup, so the
+  table load and the input load run at once instead of one after the other. The instructions per decoded byte stay
+  the same; decompression gains 1% to 2% in one `inflate()` call and 2% to 3.7% in 16 KiB / 64 KiB pieces, with
+  and without `-march=native`. The idea is from Chromium's zlib, commit
+  [456ae73](https://chromium.googlesource.com/chromium/src/third_party/zlib/+/456ae730017b9b4bd3371927abc82627fd51feef) ("Overlap bitstream refill
+  with Huffman table lookup in inflate", September 2026).
 - **Larger first-level tables.** They are 10 bits for literals and lengths and 8 bits for distances, so second
   lookups are rare.
   - The table space was recomputed with zlib's own `examples/enough.c`: 1332 + 400 entries instead of 852 + 592.
@@ -90,7 +102,8 @@ When the loop ends, it gives back the whole bytes it read ahead, leaving fewer t
 zlib's loop does. It never reads past the input or writes past the output buffer. Without a 64-bit integer type,
 the new loop is not compiled.
 
-This change is also offered to zlib as [pull request #793](https://github.com/madler/zlib/pull/793).
+This change is also offered to zlib as [pull request #793](https://github.com/madler/zlib/pull/793), without the
+lookups before refills of version 1.0.2.
 
 ## 2. Adler-32, eight bytes per step
 
@@ -377,16 +390,17 @@ Each was kept only if it was faster (for levels 10 to 12: smaller) without being
 Compression and decompression speed on Silesia, Canterbury + Calgary and enwik8 as above, each against the version
 kept.
 
-**Against Chromium's zlib.** Built with `USE_ZLIB_RABIN_KARP_HASH`, it writes zlib's bytes and decompresses up to 11%
-faster in one call and 5% to 15% faster in pieces than zlib-turbo with SIMD checksums (README, "Speed"). A sampling
-profile shows the two spending their time in the same places in the same proportions: match copies 16% to 24%,
-distance lookups 8% to 12%, decoding tables 2% to 5%, Adler-32 2% to 3%. valgrind counts the same instructions per
-decoded byte within 3% (level 1, Canterbury + Calgary in one call: 13.45 against Chromium's 13.65; Silesia in pieces:
-13.84 against 13.90) and about the same simulated branch mispredictions. Chromium's loop simply runs 10% to 14% more
-instructions per cycle where it leads; at Silesia level 6 the two run equally fast (862.6 and 860.6 MB/s with
-`-march=x86-64-v3`). Closing that would mean shaping the loop for one compiler and processor, which the plain C of
-the default build is meant to avoid; the three copy changes above are what was tried. Counts and speeds:
-[`results/chromium_compare_epyc9334.txt`](results/chromium_compare_epyc9334.txt).
+**Against Chromium's zlib.** Built with `USE_ZLIB_RABIN_KARP_HASH`, it writes zlib's bytes. Before version 1.0.2 it
+decompressed up to 11% faster in one call and 5% to 15% faster in pieces than zlib-turbo with SIMD checksums. A
+sampling profile showed the two spending their time in the same places in the same proportions: match copies 16% to
+24%, distance lookups 8% to 12%, decoding tables 2% to 5%, Adler-32 2% to 3%. valgrind counted the same instructions
+per decoded byte within 3% (level 1, Canterbury + Calgary in one call: 13.45 against Chromium's 13.65; Silesia in
+pieces: 13.84 against 13.90) and about the same simulated branch mispredictions. Chromium's loop ran 10% to 14% more
+instructions per cycle where it led, so the difference was in the order of the instructions, not their number. The
+three copy changes above did not explain it; Chromium's commit 456ae73, which moved each refill after the table
+lookup, did, and version 1.0.2 does the same (section 1). Chromium's zlib now decompresses from 2% slower to 9%
+faster in one call (faster at level 1) and 2% to 13% faster in pieces (README, "Speed"). Counts and speeds before
+1.0.2: [`results/chromium_compare_epyc9334.txt`](results/chromium_compare_epyc9334.txt).
 
 ## What is not changed, and why
 

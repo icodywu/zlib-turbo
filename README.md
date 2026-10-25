@@ -11,8 +11,8 @@ put it in place of zlib in a program, a package or a whole system, and nothing e
 
 | AMD EPYC 9334, GCC 14 -O2, one core unless noted | zlib 1.3.2 | zlib-turbo | |
 |---|---:|---:|---:|
-| Decompression, Silesia (level 6 streams) | 438 MB/s | 739 MB/s | **+69%** |
-| Decompression, enwik8 (level 6 streams) | 349 MB/s | 621 MB/s | **+78%** |
+| Decompression, Silesia (level 6 streams) | 437 MB/s | 752 MB/s | **+72%** |
+| Decompression, enwik8 (level 6 streams) | 349 MB/s | 627 MB/s | **+79%** |
 | Compression, Silesia, level 1 | 114 MB/s | 151 MB/s | **+32%** |
 | Compression, Silesia, level 6 | 31.9 MB/s | 36.0 MB/s | **+13%** |
 | Compression, Silesia, level 6, 16 threads | 31.9 MB/s | 183 MB/s | **5.7×** |
@@ -36,7 +36,7 @@ zlib-turbo is more than known speedups applied to zlib. It contributes:
    corpora, nearly 35,000 damaged streams, about 80 million differential fuzzing runs, six processor architectures
    and MSVC (see [How it was tested](#how-it-was-tested)). Most faster zlib-compatible libraries give it up
    (Chromium's copy of zlib keeps it when built with one option; see [Speed](#speed)); zlib-turbo shows how much
-   speed there is without giving it up, in plain C: 66% to 86% in decompression and 4% to 39% in compression on one
+   speed there is without giving it up, in plain C: 68% to 87% in decompression and 4% to 39% in compression on one
    core, and up to 11 times as fast with threads.
 
 2. **Multithreaded compression whose output is zlib's.** At levels 4 to 9 zlib's hash chains depend only on the
@@ -61,7 +61,7 @@ zlib-turbo is more than known speedups applied to zlib. It contributes:
    the output, that `deflateSetDictionary()` gives. Small messages compress up to 4.1 times as fast.
 
 5. **A faster decoder and faster checksums.** A 64-bit fast loop with branch-free refills, larger first-level tables
-   and wide match copies decompresses 66% to 86% faster, with zlib's results for every valid and damaged stream; it
+   and wide match copies decompresses 68% to 87% faster, with zlib's results for every valid and damaged stream; it
    is offered back to zlib as [pull request #793](https://github.com/madler/zlib/pull/793). A portable SWAR
    Adler-32, three multiplications per eight bytes, makes the zlib format's checksum 43% faster. An optional build
    adds SIMD checksums for x86, with the same results bit for bit: CRC-32 by carry-less multiplication, 5.5 times as
@@ -107,15 +107,15 @@ output pieces
 
 | Level | Silesia | Canterbury + Calgary | enwik8 |
 |---|---|---|---|
-| 1 | 412 → 681 (+66%) / 385 → 592 (+54%) | 447 → 766 (+71%) / 419 → 659 (+57%) | 343 → 603 (+76%) / 318 → 496 (+56%) |
-| 6 | 438 → 739 (+69%) / 409 → 649 (+59%) | 468 → 873 (+86%) / 437 → 755 (+73%) | 349 → 621 (+78%) / 325 → 528 (+62%) |
-| 9 | 442 → 744 (+68%) / 413 → 653 (+58%) | 474 → 881 (+86%) / 441 → 762 (+73%) | 350 → 621 (+77%) / 325 → 528 (+62%) |
+| 1 | 411 → 692 (+68%) / 384 → 610 (+59%) | 447 → 770 (+72%) / 418 → 667 (+60%) | 343 → 609 (+78%) / 318 → 511 (+61%) |
+| 6 | 437 → 752 (+72%) / 408 → 670 (+64%) | 468 → 867 (+85%) / 436 → 760 (+74%) | 349 → 627 (+79%) / 325 → 544 (+67%) |
+| 9 | 442 → 758 (+72%) / 412 → 673 (+63%) | 473 → 882 (+87%) / 440 → 769 (+75%) | 350 → 628 (+80%) / 325 → 543 (+67%) |
 
-Other compilers, Silesia level 6, compression / decompression in one call: GCC 11 +11% / +77%, clang 18 +12% /
-+62%. On 32-bit x86, where 64-bit arithmetic is emulated, +5% / +8%.
+Other compilers, Silesia level 6, compression / decompression in one call: GCC 11 +11% / +76%, clang 18 +12% /
++71%. On 32-bit x86, where 64-bit arithmetic is emulated, +5% / +20%.
 
-For context, zlib-ng 2.3.3 (compat mode, same machine and compiler) decompresses 15% to 20% faster than zlib-turbo,
-which reaches 82% to 86% of its speed without any SIMD code (the default build). zlib-ng compresses two to three times as fast, with
+For context, zlib-ng 2.3.3 (compat mode, same machine and compiler) decompresses 15% to 22% faster than zlib-turbo,
+which reaches 82% to 87% of its speed without any SIMD code (the default build). zlib-ng compresses two to three times as fast, with
 different output; at level 1 its files are 18% to 22% larger than zlib's. All runs:
 [`turbo/results/speed_epyc9334.txt`](turbo/results/speed_epyc9334.txt).
 
@@ -125,8 +125,8 @@ also with its optional SIMD checksums and `-march=native`), MB/s:
 | Silesia | Output is zlib's | Compression, level 1 / 6 / 9 | Decompression, level 1 / 6 / 9 |
 |---|---|---|---|
 | zlib 1.3.2 | | 114 / 31.9 / 13.0 | 412 / 438 / 442 |
-| zlib-turbo | yes | 151 / 36.1 / 14.2 | 681 / 738 / 744 |
-| zlib-turbo, SIMD checksums, `-march=native` | yes | 155 / 36.2 / 14.1 | 790 / 866 / 873 |
+| zlib-turbo | yes | 151 / 36.1 / 14.2 | 693 / 753 / 759 |
+| zlib-turbo, SIMD checksums, `-march=native` | yes | 155 / 36.2 / 14.1 | 804 / 881 / 890 |
 | [Chromium's zlib](https://chromium.googlesource.com/chromium/src/third_party/zlib), `USE_ZLIB_RABIN_KARP_HASH` | yes | 152 / 35.9 / 14.1 | 828 / 873 / 880 |
 | Chromium's zlib, default build | no | 154 / 58.8 / 23.3 | 828 / 873 / 880 |
 | [Cloudflare's zlib](https://github.com/cloudflare/zlib) (zlib 1.2.8 base) | no | 155 / 62.7 / 24.4 | 758 / 812 / 818 |
@@ -134,12 +134,12 @@ also with its optional SIMD checksums and `-march=native`), MB/s:
 Chromium's zlib built with `USE_ZLIB_RABIN_KARP_HASH` also writes zlib's bytes (checked at levels 1, 6 and 9): on one
 core it compresses as fast as zlib-turbo and decompresses faster, using SIMD code for x86 and Arm where zlib-turbo's
 default build is plain C. Against zlib-turbo with SIMD checksums and `-march=native`, on Silesia, Canterbury +
-Calgary and enwik8, it decompresses from 1% slower to 11% faster in one `inflate()` call (faster most at level 1) and
-5% to 15% faster in 16 KiB / 64 KiB pieces; against zlib-turbo's default build (plain C, no `-march`), 15% to 36%
-faster. Its default build, like Cloudflare's,
-compresses levels 6 and 9 1.6 to 1.7 times as fast as zlib-turbo, with different output (files within 2% of zlib's
-size). Beside them, zlib-turbo adds multithreaded compression with zlib's output, levels 10 to 12 and prepared
-dictionaries. All runs: [`turbo/results/forks_epyc9334.txt`](turbo/results/forks_epyc9334.txt).
+Calgary and enwik8, it decompresses from 2% slower to 9% faster in one `inflate()` call (faster at level 1, by 3%
+to 9%) and 2% to 13% faster in 16 KiB / 64 KiB pieces; against zlib-turbo's default build (plain C, no `-march`),
+13% to 32% faster. Its default build, like Cloudflare's, compresses levels 6 and 9 1.6 to 1.7 times as fast as
+zlib-turbo, with different output (files within 2% of zlib's size). Beside them, zlib-turbo adds multithreaded
+compression with zlib's output, levels 10 to 12 and prepared dictionaries. All runs:
+[`turbo/results/forks_epyc9334.txt`](turbo/results/forks_epyc9334.txt).
 
 zlib-turbo is also in [lzbench](https://github.com/inikep/lzbench) and [TurboBench](https://github.com/powturbo/TurboBench),
 which measure it with zlib, zlib-ng, libdeflate and many other codecs; TurboBench publishes
@@ -150,8 +150,8 @@ which measure it with zlib, zlib-ng, libdeflate and many other codecs; TurboBenc
 Nine changes to zlib 1.3.2:
 
 1. **Decompression: a 64-bit bit buffer and wide copies** (`inffast.c`). A new fast loop refills a 64-bit bit
-   buffer eight bytes at a time, once per length/distance pair or per up to three literals, and copies matches 16
-   or 8 bytes at a time. Larger first-level decoding tables (10 bits for literals and lengths, 8 for distances)
+   buffer eight bytes at a time, after each table lookup so that the two loads overlap, and copies matches 16 or 8
+   bytes at a time. Larger first-level decoding tables (10 bits for literals and lengths, 8 for distances)
    make second lookups rare. The existing loop finishes near the buffer ends exactly as before.
 2. **Adler-32 eight bytes at a time** (`adler32.c`) on 64-bit targets: one multiplication sums eight bytes and two
    weight them, with a modulo only every 2^20 bytes. This speeds up both directions for the zlib format.
