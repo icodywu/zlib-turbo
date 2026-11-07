@@ -82,7 +82,30 @@ local COPY_INLINE unsigned char FAR *copy_back(unsigned char FAR *out,
         } while (out < stop);
         return stop;
     }
-    /* dist 2..7: eight bytes per step, of which the first dist are right;
+    /* dist 2..7: on a little-endian machine, the dist bytes before out
+       repeated in a register and stored eight bytes at a time, advancing by
+       the largest multiple of dist up to eight, so that no step reads what
+       the one before wrote */
+    {
+        Z_U8 v = 1;
+
+        if (*(unsigned char *)&v) {
+            unsigned step = 8 - 8 % dist;
+
+            zmemcpy(&v, from, 8);
+            v &= ((Z_U8)1 << (dist << 3)) - 1;
+            v |= v << (dist << 3);
+            if (dist < 4)
+                v |= v << (dist << 4);
+            do {
+                zmemcpy(out, &v, 8);
+                zmemcpy(out + step, &v, 8);
+                out += step << 1;
+            } while (out < stop);
+            return stop;
+        }
+    }
+    /* otherwise eight bytes per step, of which the first dist are right;
        the next step rewrites the rest */
     do {
         Z_U8 v;
