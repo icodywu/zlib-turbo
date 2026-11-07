@@ -46,7 +46,7 @@ for f in "$@"; do
     else
         r="$r reset: 4 threads DIFFERENT from 1,"; fail=1
     fi
-    r="$r $(grep -c '^reset.*round trip ok' "$WORK/turbo.txt" || true) of $(grep -c '^reset' "$WORK/turbo.txt" || true) round trips ok,"
+    r="$r $(grep -c '^reset.*round trip ok' "$WORK/turbo.txt" || true) of $(grep -c '^reset.*round trip' "$WORK/turbo.txt" || true) round trips ok,"
     r="$r $(diff "$WORK/t_reset.txt" "$WORK/s_reset.txt" | grep -c '^<' || true) differ from zlib,"
     r="$r zlib's wrong in $(grep -c '^reset.*threads 1 .*round trip FAIL' "$WORK/stock.txt" || true);"
     r="$r copy: $(grep -c '^copy.*round trip ok' "$WORK/turbo.txt" || true) ok"

@@ -125,13 +125,21 @@ static void reset_case(const unsigned char *in, size_t len, int level, int wbits
             if (ret == Z_STREAM_END) done = 1;
         } while (s.avail_out == 0 && !done);
         fed += piece - s.avail_in;
-        if (rk == -100 && fed > at) {
+        if (rk == -100 && fed > at && !done) {
             /* the window holds the input up to the lookahead */
             dict_end = fed - ((deflate_state *)s.state)->lookahead;
             rk = deflateResetKeep(&s);
             mark = got;
             from = fed;         /* the input after the reset */
         }
+    }
+    if (rk == -100) {           /* one piece: no middle to reset in */
+        printf("reset level %d wbits %d threads %d pieces %lu: no reset, "
+               "input in one piece\n", level, wbits, threads,
+               (unsigned long)size);
+        deflateEnd(&s);
+        free(out);
+        return;
     }
     off = payload(out + mark, got - mark, wbits, &n);
     dn = dict_end < 32768 ? dict_end : 32768;
@@ -218,6 +226,7 @@ int main(int argc, char **argv) {
     int level, w, t;
 
     if (argc != 2) { printf("usage: zedge FILE\n"); return 1; }
+    setvbuf(stdout, NULL, _IOLBF, 0);   /* lines out before a sanitizer stops */
     in = load(argv[1], &len);
     if (len > 3000000) len = 3000000;
     for (level = 0; level <= TOP; level++)
