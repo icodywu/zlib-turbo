@@ -42,7 +42,9 @@ typedef struct {
    9 and 6 bits. Define Z_INFLATE_FAST64 as 0 to use zlib's decoder, or as 1
    to use the fast loop; it needs a 64-bit integer type. */
 #ifndef Z_INFLATE_FAST64
-#  if defined(__x86_64__) || defined(__aarch64__) || defined(_M_X64) ||       defined(_M_ARM64) || defined(_WIN64) || defined(__LP64__) ||       defined(_LP64) || defined(__i386__) || defined(_M_IX86)
+#  if defined(__x86_64__) || defined(__aarch64__) || defined(_M_X64) || \
+      defined(_M_ARM64) || defined(_WIN64) || defined(__LP64__) || \
+      defined(_LP64) || defined(__i386__) || defined(_M_IX86)
 #    define Z_INFLATE_FAST64 1
 #  else
 #    define Z_INFLATE_FAST64 0
