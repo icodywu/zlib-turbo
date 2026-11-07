@@ -1,7 +1,7 @@
 # How zlib-turbo is faster
 
 zlib-turbo follows one rule: change *how* zlib does its work, never *what* it decides. Everything that shapes the
-compressed stream stays as it is in zlib 1.3.2:
+compressed stream stays as it is in zlib 1.4 (1.3.2 before version 1.2.0):
 
 - the hash function and the hash chains;
 - the chain limits and the lazy-match rules of each level;
@@ -17,9 +17,10 @@ sections below name the ones borrowed. The work was fitting them into zlib so th
 or error message changes, in any build configuration, and checking that by comparing with unmodified zlib (see
 [How it was tested](../README.md#how-it-was-tested)).
 
-All measurements here, except those with threads in section 8, are on one core of an AMD EPYC 9334 (Zen 4, 2.7 GHz),
-GCC 14.2 `-O2`, best of two runs. They cover Silesia, Canterbury + Calgary and enwik8, each file compressed whole.
-Speeds are MB/s of uncompressed data.
+All measurements here, except those with threads in section 8 and those on 64-bit ARM, are on one core of an AMD
+EPYC 9334 (Zen 4, 2.7 GHz), GCC 14.2 `-O2`, best of two runs. They cover Silesia, Canterbury + Calgary and enwik8,
+each file compressed whole. Speeds are MB/s of uncompressed data. The 64-bit ARM measurements (version 1.2.0) are on
+an Apple M5 Pro, Apple clang 21 `-O2`, one thread at the highest QoS class (the fastest cores).
 
 ## What each change gives
 
@@ -36,13 +37,17 @@ Each row adds one commit to the row above it.
 | + 1. lookups before refills (1.1.0) |  |  |  | 752 (**+2%**) |
 | + 1. window copies inline (1.1.0) |  |  |  | 756 (**+0.5%**) |
 | + 6. compression loops (1.1.0) | 165 (**+9%**) | 37.3 (**+4%**) | 14.4 (**+1%**) |  |
+| + 1. pattern copies (1.2.0) |  |  |  | 785 (**+3%**) |
 
 The table is for Silesia; Canterbury + Calgary and enwik8 show the same pattern. Changes 3 to 5 leave
-decompression as it is (row 5, within 0.3%). The last three rows are version 1.1.0: the decoder's loop reordered
+decompression as it is (row 5, within 0.3%). Three rows are version 1.1.0: the decoder's loop reordered
 and its window copies inline (section 1), which leave compression as it is, and the compression loops (section 6),
 which leave decompression as it is; window copies gain more in 16 KiB / 64 KiB pieces and on the smaller files of
-Canterbury + Calgary. All runs, for the three corpora: [`results/steps_epyc9334.txt`](results/steps_epyc9334.txt);
-the last three rows: [`results/speed_epyc9334.txt`](results/speed_epyc9334.txt).
+Canterbury + Calgary. The last row is version 1.2.0, on zlib 1.4, which runs at zlib 1.3.2's speed: matches at
+distances 2 to 7 from a pattern in a register (section 1). All runs, for the three corpora:
+[`results/steps_epyc9334.txt`](results/steps_epyc9334.txt); the 1.1.0 rows:
+[`results/speed_epyc9334.txt`](results/speed_epyc9334.txt); the 1.2.0 row and the 64-bit ARM measurements:
+[`results/release_120.txt`](results/release_120.txt).
 
 ## 1. Decompression: a 64-bit bit buffer, larger tables and wide copies
 
@@ -88,8 +93,14 @@ unchanged, for the ends of the buffers.
 - **Wide match copies.**
   - Matches at distance 16 or more are copied 16 bytes at a time, and at distance 8 to 15 eight at a time.
   - A distance of 1 (a run of one byte) spreads the byte across a 64-bit word and stores it eight bytes at a time.
-  - Distances 2 to 7 copy eight bytes and advance by the distance. The first *distance* bytes of each step are
-    right, and the next step overwrites the rest.
+  - Distances 2 to 7 (version 1.2.0, on little-endian machines) keep the *distance* bytes before the match
+    repeated in a 64-bit register, and store it eight bytes at a time, advancing by the largest multiple of the
+    distance up to eight (8, 6, 8, 5, 6 or 7 bytes), so that no store waits for a load of what the store before
+    wrote. Before, each step loaded eight bytes from *distance* bytes back, stored them and advanced by the
+    distance. Data made of short repeats gains most: float32 values repeating every four bytes (from Zijin Zhang's
+    float32 benchmark) decode 3.0 times as fast on the EPYC
+    and 8.9 times on the Apple M5 Pro, and the three corpora 2% to 4% faster on the EPYC. Big-endian machines keep
+    the step-by-distance copy.
   - A copy may write up to 15 bytes past the end of the match. That is why the loop needs 258 + 15 bytes of space,
     and those bytes are overwritten by what follows.
   - A match that reaches back past the output of the current `inflate()` call is copied from the sliding window
@@ -97,6 +108,17 @@ unchanged, for the ends of the buffers.
     with a short length (version 1.1.0). Both copy functions are forced inline: GCC 14 kept the match copy out of
     line, a call per match. Decompression gains 0.4% to 5% in one call and 1.5% to 5.5% in 16 KiB / 64 KiB pieces
     with `-O2`, and 0.5% to 2% and 2.4% to 5.5% with `-march=native`.
+
+- **Table entries as one load, on 64-bit ARM** (version 1.2.0). A decoding table entry is four bytes: the code's
+  bit count, an operation and a value. clang reads the three through a pointer as three loads, after computing the
+  entry's address, and then shifts the bit buffer by the loaded bit count: every literal waits for an address
+  computation, a load and a shift. zlib-turbo puts the bit count first in the entry (`inftrees.h`; `inffixed.h`
+  follows) and on 64-bit ARM reads the entry as one little-endian 32-bit word, with the table index folded into the
+  load. The bit buffer then shifts by the word itself, since shifts use only the low six bits of their count, and
+  the operation and value come from it with a shift or a mask off the chain. On the Apple M5 Pro, decompression
+  gains 12% to 14% on the three corpora and 22% on literal-heavy data. On the EPYC with GCC 14 the same reads were
+  0% to 4% slower (Canterbury + Calgary), so other targets read the fields through a pointer as before.
+  `-DZ_ENTRY32=1` or `=0` overrides the choice; 1 needs a little-endian machine.
 
 **Why the results are the same.** The tables decode the same codes; only the split between first and second level
 differs. Every check runs at the same point with the same message:
@@ -115,9 +137,6 @@ where they are measured faster (GCC 11 `-m32`: +20% at level 6). On other 32-bit
 64-bit shifts take several instructions and no measurement was made, so inflate keeps zlib's own loop and 9- and
 6-bit tables there, as it does without a 64-bit integer type. `-DZ_INFLATE_FAST64=0` or `=1` overrides the choice
 (version 1.1.0).
-
-This change is also offered to zlib as [pull request #793](https://github.com/madler/zlib/pull/793), without the
-lookups before refills of version 1.1.0.
 
 ## 2. Adler-32, eight bytes per step
 
@@ -147,6 +166,13 @@ That is three multiplications per eight bytes. The 64-bit accumulators reduce mo
 It is on by default only where 64-bit multiplication is fast: x86-64 and AArch64, including 64-bit MSVC. On 32-bit
 x86, where it would be emulated, it measured 1.55 GB/s against zlib's 3.42, so it stays off there.
 `-DZ_ADLER_SWAR=0` or `=1` overrides the choice.
+
+**On 64-bit ARM, NEON** (version 1.2.0). Every 64-bit ARM processor has NEON, so the vector code needs no build
+option and no run-time check there, and it is on by default (`-DNO_TURBO_NEON` turns it off). It works as the
+optional AVX2 code of section 10, 32 bytes per step: `vpaddlq_u8` and `vpadalq_u16` add up the bytes, `vmull_u8` and
+`vmlal_u8` weight them by 32 to 1 into 16-bit lanes (four products of at most 255 × 32 each), and the lanes reduce
+every 5536 bytes. On the Apple M5 Pro: 52.7 GB/s against 11.7 for the eight-byte code, 4.4 for zlib's and 24.3
+for macOS's libz; zlib streams decode 6% to 9% faster.
 
 The gzip format uses CRC-32, which zlib already computes several bytes at a time, and raw deflate has no checksum.
 Those formats gain from change 1 only.
@@ -429,6 +455,8 @@ Each was kept only if it was faster (for levels 10 to 12: smaller) without being
 | Force `copy_back()` inline: GCC 14 keeps it out of line, a call per match | | 0% to +2.5% at `-O2`, -0.2% to -3% with `-march=native` |
 | Larger first-level decoding tables: 9 to 11 bits for distances, 11 for literals and lengths | | -0.1% to -1.3% on average (11-bit lengths: within 1%); second lookups were already rare, 0.3-0.4% of distances and 1-2% of other codes |
 | Fetch the next code before copying a match | common in fast decoders | 32-bit x86 -5% to -8%; 64-bit with GCC 14 -1% to -3% in one call, +1% to +2% in pieces; clang +4% |
+| Read each decoding table entry by value (a local `code`) instead of through a pointer, on x86 | Apple's `zopt_inffast.c` | -1% to -2% on Silesia, -9% on matches of mean length 47 (GCC 14); on 64-bit ARM superseded by the one-load reads of section 1 |
+| One 32-bit load per decoding table entry, on x86 | | 0% to -4% (Canterbury + Calgary) with GCC 14; kept on 64-bit ARM (section 1), +12% to +22% there |
 | Index the dictionary faster in `deflateSetDictionary()` | | at most 1% to 3%: indexing takes about 2.5 cycles per position, bound by memory writes |
 | Clear only the hash slots a small stream used, in `deflateReset()` | | clearing takes 0.6 µs of the 4 to 9 µs a message of 64 to 256 bytes costs; not worth the code |
 | Threads: search every position for every possible match to beat, instead of following the parse | | 1.8 MB/s at level 9 with two threads, far below one thread: most of the work is for positions the parse skips |
@@ -469,8 +497,9 @@ every one of these decisions, so its output stays byte-identical at levels 0 to 
 that of levels 10 to 12, which zlib does not have; a faster but different compressor could come later only as such
 an option, never as the default.
 
-**SIMD code, assembly and run-time CPU detection.** The default build has none of them; the SIMD checksums
-(change 10) come only when the build asks for them, and nothing detects the CPU at run time. More of it would make
+**SIMD code, assembly and run-time CPU detection.** The default build has none of them, except Adler-32 with NEON
+on 64-bit ARM (section 2), whose every processor has it; the SIMD checksums for x86 (change 10) come only when the
+build asks for them, and nothing detects the CPU at run time. More of it would make
 the code larger, harder to review and harder to port, which is the opposite of what a drop-in zlib needs. The only
 compiler-specific code is the count-trailing-zeros call in change 3, and it has a portable fallback. Compilers
 targeting newer CPUs generate better code from the same source anyway: built with `-march=x86-64-v3` (AVX2, BMI2),

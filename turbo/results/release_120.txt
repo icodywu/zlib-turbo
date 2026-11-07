@@ -1,0 +1,222 @@
+# zlib-turbo 1.2.0 (on zlib 1.4): the measurements of the README and turbo/TECHNIQUES.md, 2026-11-07.
+#
+# x86: one core of an AMD EPYC 9334 (Zen 4, 2.7 GHz), Ubuntu 22.04, GCC 14.2 -O2, taskset to core 2.
+# Streams made by stock zlib 1.4; Silesia (12 files), Canterbury + Calgary (all files), enwik8; each file whole.
+# Decompression: turbo/bench/run_speed.sh (zbench, mode 0 = one inflate() call, mode 1 = 16 KiB in / 64 KiB out),
+# best of 3 rounds (turbo/bench/summarize.py). Compression: turbo/bench/zcbench.c, best of 3 rounds, with the
+# FNV-1a hash of all compressed bytes (equal hashes: identical output).
+# Apple M5 Pro (64-bit ARM): the second half of this file.
+
+## Decompression, zlib 1.4 -> zlib-turbo 1.2.0, -O2 (job relspd 951773)
+| corpus | level | one call (MB/s) | 16K in / 64K out (MB/s) |
+|---|---|---|---|
+| silesia | 1 | 414 -> 734 (+77%) | 388 -> 651 (+68%) |
+| cc | 1 | 450 -> 836 (+86%) | 422 -> 734 (+74%) |
+| enwik8 | 1 | 344 -> 661 (+92%) | 320 -> 558 (+75%) |
+| silesia | 6 | 440 -> 785 (+78%) | 413 -> 704 (+70%) |
+| cc | 6 | 475 -> 935 (+97%) | 442 -> 832 (+88%) |
+| enwik8 | 6 | 352 -> 663 (+88%) | 330 -> 582 (+77%) |
+| silesia | 9 | 446 -> 790 (+77%) | 417 -> 708 (+70%) |
+| cc | 9 | 481 -> 944 (+96%) | 447 -> 837 (+87%) |
+| enwik8 | 9 | 353 -> 664 (+88%) | 330 -> 582 (+77%) |
+
+## Decompression of gzip streams, both built with -O2 -march=native -DZ_TURBO_SIMD, level 6
+| corpus | level | one call (MB/s) | 16K in / 64K out (MB/s) |
+|---|---|---|---|
+| silesia | 6 | 435 -> 855 (+97%) | 410 -> 766 (+87%) |
+| cc | 6 | 468 -> 1047 (+124%) | 440 -> 916 (+109%) |
+| enwik8 | 6 | 351 -> 712 (+103%) | 330 -> 623 (+89%) |
+
+## Compression, zlib 1.4 -> zlib-turbo 1.2.0 (best of 3 rounds; output identical in every case)
+| level | silesia | cc | enwik8 |
+|---|---|---|---|
+| 1 | 114.4 -> 165.1 (+44%, same bytes) | 126.9 -> 189.3 (+49%, same bytes) | 99.7 -> 147.6 (+48%, same bytes) |
+| 3 | 75.0 -> 96.3 (+29%, same bytes) | 72.4 -> 93.6 (+29%, same bytes) | 60.5 -> 77.9 (+29%, same bytes) |
+| 6 | 31.9 -> 37.3 (+17%, same bytes) | 26.8 -> 30.7 (+15%, same bytes) | 24.4 -> 28.0 (+15%, same bytes) |
+| 9 | 13.1 -> 14.4 (+10%, same bytes) | 8.3 -> 8.7 (+5%, same bytes) | 19.0 -> 21.2 (+11%, same bytes) |
+
+## Decompression, the zlib-1.4 branch before the 1.2.0 decoder changes -> 1.2.0 (job a64x86 951651)
+| corpus | level | one call (MB/s) | 16K in / 64K out (MB/s) |
+|---|---|---|---|
+| silesia | 1 | 707 -> 734 (+4%) | 631 -> 651 (+3%) |
+| cc | 1 | 814 -> 835 (+3%) | 713 -> 734 (+3%) |
+| enwik8 | 1 | 636 -> 661 (+4%) | 539 -> 558 (+4%) |
+| silesia | 6 | 761 -> 785 (+3%) | 686 -> 704 (+3%) |
+| cc | 6 | 914 -> 935 (+2%) | 808 -> 831 (+3%) |
+| enwik8 | 6 | 641 -> 663 (+3%) | 566 -> 582 (+3%) |
+| silesia | 9 | 767 -> 790 (+3%) | 690 -> 708 (+3%) |
+| cc | 9 | 921 -> 944 (+2%) | 815 -> 837 (+3%) |
+| enwik8 | 9 | 642 -> 664 (+3%) | 566 -> 582 (+3%) |
+
+## Zijin Zhang's float32 inputs (8,000,000 bytes each, level 6 gzip by stock zlib), one call, best of 5, MB/s
+| input | zlib-1.4 branch before | 1.2.0 |
+|---|---:|---:|
+| noisy gz | 335 | 347 |
+| noisy raw | 381 | 396 |
+| quantized gz | 1600 | 1630 |
+| quantized raw | 3740 | 3954 |
+| stepped gz | 1897 | 2409 |
+| stepped raw | 5980 | 17804 |
+
+## Validation logs (exit status 0 = passed)
+### res_950789_0
+host auh7-3b-gpu-186 task 0
+compress gcc14 exit 0
+compress gcc11 -m32 exit 0
+compress clang18 exit 0
+compress simd-native exit 0
+compress FASTEST exit 0
+levels 10-12 same as 1.1.0 (0 = same) exit 0
+### res_950789_1
+host auh7-3b-gpu-219 task 1
+edge exit 1
+edge asan+ubsan exit 0
+edge tsan exit 0
+edge FASTEST exit 0
+edge on 1.1.0 under asan (expected to fail) exit 1
+threads 4 exit 0
+threads 16 exit 0
+threads asan+ubsan exit 0
+threads tsan exit 0
+dict exit 0
+opt exit 0
+opt asan+ubsan exit 0
+stress exit 0
+stress strict exit 0
+stress Z_INFLATE_FAST64=0 exit 0
+cross m32 exit 0
+make test ZLIB_DEBUG exit 0
+cmake ctest exit 8
+### res_950789_2
+host auh7-4b-gpu-033 task 2
+fuzz deflate ubsan exit 0
+fuzz deflate asan exit 0
+### res_950789_3
+host auh7-4b-gpu-156 task 3
+fuzz inflate ubsan exit 0
+fuzz inflate asan exit 0
+### rese_950918
+edge cc exit 0
+edge on 1.1.0 asan exit 1
+### resa64_951651_0
+host auh7-3b-gpu-049
+stress exit 0
+stress strict exit 0
+stress Z_INFLATE_FAST64=0 exit 0
+cross m32 exit 0
+cross ppc64le exit 0
+cross arm64 exit 0
+cross armv5 exit 0
+cross s390x exit 0
+make test ZLIB_DEBUG exit 0
+fuzz inflate ubsan exit 0
+fuzz inflate asan exit 0
+
+# res_950789_1 'edge' failed only on the small files, where the test reset after the stream had ended (a test
+# bug, fixed in 345384d; rese_950918 reruns all 29 small files: exit 0); 'cmake ctest' failed only
+# zlib_coverage-summary, the cluster's gcov 11 crashing on GCC 14 data; 'edge on 1.1.0 under asan' is expected
+# to fail: zlib-turbo 1.1.0's deflateCopy() of a level 10 to 12 stream overflowed pending_buf at level 0.
+
+# Apple M5 Pro, macOS 26.3.1, Apple clang version 21.0.0 (clang-2100.1.1.101), -O2.
+# Every program runs at QoS class user-interactive (the fastest cores), linked with a constructor that sets it;
+# the Mac was idle (no keyboard or mouse input) during all runs.
+# Corpora: the same files, level 6 zlib streams made by stock zlib 1.4 (turbo/bench/zmake.c), turbo/bench/zbench.c,
+# mode 0 = one inflate() call, mode 1 = 16 KiB in / 64 KiB out. float32: Zijin Zhang's three inputs, 8,000,000 bytes
+# each, level 6 gzip streams and raw deflate made by stock zlib, one inflate() call, 0.5 s per measurement,
+# rotating library order. libdeflate 1.26 (its library sources, -O2) has no zlib API, so only the float32 rows.
+# Chromium's zlib: its CMake build with ENABLE_SIMD_OPTIMIZATIONS (NEON, ARMv8 CRC-32). macOS libz: the system
+# library (zlibVersion() 1.2.12). Apple clang defines __ARM_FEATURE_CRC32, so stock zlib uses the CRC-32 instructions.
+
+## Apple M5 Pro: zlib-turbo 1.2.0 against the others, MB/s (run 2026-11-07; commit 2e8ea5f, whose files are those of
+## fc033aa, the release code before its documentation commit)
+| | zlib 1.4 | zlib-turbo 1.2.0 | Chromium's zlib | libdeflate 1.26 | macOS libz |
+|---|---:|---:|---:|---:|---:|
+| Silesia, one call / pieces | 578 / 542 | 1284 / 1140 | 1088 / 1003 | - | 1391 / 1248 |
+| Canterbury + Calgary, one call / pieces | 774 / 722 | 1650 / 1581 | 1421 / 1386 | - | 1907 / 1720 |
+| enwik8, one call / pieces | 471 / 436 | 1071 / 916 | 905 / 819 | - | 1167 / 1034 |
+| float32 noisy, gzip | 348 | 554 | 449 | 601 | 601 |
+| float32 noisy, raw deflate | 352 | 565 | 452 | 603 | 608 |
+| float32 quantized, gzip | 2749 | 5602 | 5212 | 9468 | 6221 |
+| float32 quantized, raw deflate | 2992 | 6678 | 6130 | 10610 | 7181 |
+| float32 stepped, gzip | 1899 | 16913 | 19139 | 12365 | 7992 |
+| float32 stepped, raw deflate | 2005 | 31621 | 35398 | 14109 | 9546 |
+(corpora: best of 2 rounds; float32: best of 7 rounds)
+
+## Apple M5 Pro: checksums on 64 MiB, best of 10 calls, 5 rounds (GB/s)
+| | zlib 1.4 | zlib-1.4 branch before (SWAR) | zlib-turbo 1.2.0 (NEON) | macOS libz |
+|---|---:|---:|---:|---:|
+| Adler-32 | 4.4 | 11.7 | 52.7 | 24.3 |
+| CRC-32 | 33.1 | 33.1 | 33.2 | 49.1 |
+
+## Apple M5 Pro: the 1.2.0 decoder changes one by one (runs of 2026-11-06), MB/s
+# turbo = the zlib-1.4 branch before them (zlib 1.4 merged); pat = + pattern copies; val = turbo with table entries
+# read by value (not kept); neon = turbo + NEON Adler-32; all = pat + neon; shift = all + the bit count first in
+# each entry; e32 = shift + each entry read as one 32-bit load (the 1.2.0 decoder).
+| | turbo | pat | val | neon | all | Chromium's zlib | macOS libz |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| Silesia, one call / pieces | 1017 / 924 | 1013 / 910 | 1051 / 958 | 1088 / 981 | 1137 / 1026 | 1089 / 1002 | 1386 / 1246 |
+| Canterbury + Calgary, one call / pieces | 1288 / 1210 | 1276 / 1252 | 1293 / 1238 | 1410 / 1319 | 1443 / 1389 | 1422 / 1385 | 1904 / 1718 |
+| enwik8, one call / pieces | 848 / 758 | 841 / 741 | 888 / 795 | 898 / 792 | 954 / 848 | 900 / 818 | 1158 / 1031 |
+| float32 noisy, gzip | 438 | 434 | 454 | 441 | 455 | 449 | 600 |
+| float32 noisy, raw deflate | 444 | 440 | 461 | 447 | 462 | 453 | 609 |
+| float32 quantized, gzip | 5280 | 5590 | 5373 | 5464 | 5575 | 5225 | 6192 |
+| float32 quantized, raw deflate | 6294 | 6672 | 6359 | 6504 | 6634 | 6154 | 7175 |
+| float32 stepped, gzip | 3280 | 17021 | 5195 | 3279 | 16913 | 19093 | 7992 |
+| float32 stepped, raw deflate | 3605 | 32000 | 5952 | 3604 | 31620 | 35398 | 9535 |
+(corpora: best of 2 rounds; float32: best of 5 rounds)
+
+| | all | shift | e32 | macOS libz |
+|---|---:|---:|---:|---:|
+| Silesia, one call / pieces | 1133 / 1022 | 1138 / 1028 | 1278 / 1138 | 1381 / 1241 |
+| Canterbury + Calgary, one call / pieces | 1442 / 1392 | 1442 / 1354 | 1648 / 1579 | 1904 / 1720 |
+| enwik8, one call / pieces | 952 / 844 | 948 / 840 | 1063 / 916 | 1154 / 1027 |
+| float32 noisy, gzip | 455 | 463 | 555 | 601 |
+| float32 noisy, raw deflate | 462 | 470 | 564 | 608 |
+| float32 quantized, gzip | 5575 | 5575 | 5634 | 6211 |
+| float32 quantized, raw deflate | 6639 | 6628 | 6700 | 7188 |
+| float32 stepped, gzip | 16913 | 16842 | 16878 | 7992 |
+| float32 stepped, raw deflate | 31496 | 31496 | 31496 | 9558 |
+(corpora: best of 2 rounds; float32: best of 7 rounds)
+
+## Apple M5 Pro: -O2 against -O3 (run of 2026-11-06), MB/s
+| | zlib 1.4 -O2 | zlib 1.4 -O3 | turbo -O2 | turbo -O3 | pat -O2 | pat -O3 |
+|---|---:|---:|---:|---:|---:|---:|
+| Silesia, one call / pieces | 576 / 541 | - | 993 / 908 | - | 994 / 884 | - |
+| Canterbury + Calgary, one call / pieces | 771 / 718 | - | 1287 / 1210 | - | 1275 / 1255 | - |
+| enwik8, one call / pieces | 471 / 436 | - | 842 / 757 | - | 842 / 742 | - |
+| float32 noisy, gzip | 349 | 350 | 439 | 434 | 437 | 438 |
+| float32 noisy, raw deflate | 353 | 354 | 443 | 441 | 439 | 444 |
+| float32 quantized, gzip | 2748 | 2740 | 5274 | 5337 | 5583 | 5427 |
+| float32 quantized, raw deflate | 2994 | 2972 | 6192 | 6299 | 6667 | 6431 |
+| float32 stepped, gzip | 1899 | 1901 | 3277 | 3279 | 16985 | 16842 |
+| float32 stepped, raw deflate | 2004 | 2006 | 3604 | 3604 | 32000 | 31496 |
+(corpora: best of 2 rounds; float32: best of 5 rounds)
+# (zbench was run for the -O2 builds only.)
+
+## Apple M5 Pro: tests of the release tree, natively (exit status 0 = passed)
+stress exit 0
+edge exit 0
+threads exit 0
+compress exit 0
+make test exit 0
+zsum exit 0
+# stress: turbo/tests/run_stress.sh (ASan + UBSan) on Canterbury + Calgary and Silesia against stock zlib 1.4:
+#   stock: 1.4: 4346 checks, 54120 damaged streams, 0 failures
+#   patched: 1.4: 4346 checks, 54120 damaged streams, 0 failures
+#   damaged streams with a different result: 0 of    54120
+#   decodes with different input or output left after a call: 0 of    12384
+#   ALL OK
+# edge: turbo/tests/run_edge.sh; threads: zmt check 4; compress: run_compress.sh (levels 0 to 9, same output):
+#   corp/cc/pic: exact: zlib's ( 60 cases); reset: 4 threads = 1 ( 78 cases), 156 of 156 round trips ok, 24 differ from zlib, zlib's wrong in 12; copy: 12 ok
+#   corp/silesia/dickens: exact: zlib's ( 60 cases); reset: 4 threads = 1 ( 78 cases), 156 of 156 round trips ok, 9 differ from zlib, zlib's wrong in 0; copy: 12 ok
+#   288 cases, 0 differ (threads 4)
+#   compress (Silesia + Canterbury + Calgary): 10 levels, output same at 10
+#   zsum: 527572 cases, 0 differ
+# Earlier (2026-11-06, the e32 tree: the 1.2.0 decoder before comment clean-ups), also with INFLATE_STRICT and
+# with Z_INFLATE_FAST64=0 (zlib's own decoding loop):
+#   stress_strict: stock: 1.4: 3074 checks, 38280 damaged streams, 0 failures
+#   stress_strict: patched: 1.4: 3074 checks, 38280 damaged streams, 0 failures
+#   stress_strict: ALL OK
+#   stress_f0: stock: 1.4: 3074 checks, 38280 damaged streams, 0 failures
+#   stress_f0: patched: 1.4: 3074 checks, 38280 damaged streams, 0 failures
+#   stress_f0: ALL OK
