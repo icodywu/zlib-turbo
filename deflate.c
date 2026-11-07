@@ -995,13 +995,41 @@ int ZEXPORT deflateResetKeep(z_streamp strm) {
         s->matches = matches;
     }
 
+    /* zlib-turbo: the last two positions went into the hash chains with
+       hashes of bytes in the lookahead, which is dropped here. A chain could
+       then offer one of them where its third byte differs, which
+       longest_match() takes as equal: a wrong match. Take them out of the
+       chains, to be inserted again with the bytes that come next. */
+    if (s->lookahead) {
+        uInt k, p, h;
+        for (k = 1; k < MIN_MATCH && k <= s->strstart; k++) {
+            if (k <= s->insert)
+                continue;               /* not in the chains yet */
+            p = s->strstart - k;
+            h = s->window[p];
+            UPDATE_HASH(s, h, s->window[p + 1]);
+            UPDATE_HASH(s, h, s->window[p + 2]);
+            if (s->head[h] == (Pos)p) {
+#ifdef FASTEST
+                s->head[h] = NIL;
+#else
+                s->head[h] = s->prev[p & s->w_mask];
+#endif
+                s->insert = k;
+            }
+        }
+    }
+
     /* Keep the window and the hash, but drop what was left unfinished */
     s->block_start = (long)s->strstart;
     s->lookahead = 0;
     s->match_length = s->prev_length = MIN_MATCH-1;
     s->match_available = 0;
 #ifdef Z_TURBO_THREADS
-    mt_reset(s);                /* the chunks searched the dropped bytes */
+    /* The chunks searched the dropped bytes. Start them again MAX_DIST past
+       here, as after a change of compression function, so that the parse
+       searches the positions near the new bytes itself. */
+    mt_restart(s, s->mt_abs + s->strstart, 1);
 #endif
 #ifdef Z_TURBO_OPT
     if (s->opt != Z_NULL && !s->opt->fresh) {

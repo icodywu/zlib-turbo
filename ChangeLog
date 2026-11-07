@@ -8,9 +8,16 @@ Changes in zlib-turbo 1.2.0, an altered version of zlib 1.4 (not released)
   ends exactly at the end of the output space, and deflateResetKeep() in the
   middle of a stream drops the threads' searches of the dropped input and,
   at levels 10 to 12, the window
+- deflateResetKeep() in the middle of a stream, which in zlib 1.4 drops the
+  lookahead but keeps the hash chains, also takes out of the chains the last
+  two positions, whose hashes include dropped bytes: zlib 1.4 can then write
+  a match whose third byte is wrong, and data that inflates to something
+  else. zlib-turbo's output differs from zlib 1.4's only in that case
 - deflateCopy() of a stream at levels 10 to 12 records zlib's pending buffer
   size, so that the copy can go back to levels 0 to 9 before compressing
-- Compressed output at levels 0 to 9 still zlib's, byte for byte
+- turbo/tests/zedge.c and run_edge.sh test these
+- Compressed output at levels 0 to 9 still zlib's, byte for byte, except
+  after deflateResetKeep() in the middle of a stream (above)
 
 Changes in zlib-turbo 1.1.0
 - inflate_fast() looks up each code before the refill that follows it, so the
