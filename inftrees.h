@@ -20,10 +20,13 @@
    the number of bits in this code or part of the code to drop off
    of the bit buffer.  val is the actual byte to output in the case
    of a literal, the base length or distance, or the offset from
-   the current table to the next table.  Each entry is four bytes. */
+   the current table to the next table.  Each entry is four bytes.
+   zlib-turbo: bits comes first, so that inffast.c can shift the bit buffer
+   by an entry read as one 32-bit word (see Z_ENTRY32 there); inffixed.h
+   follows that order. */
 typedef struct {
-    unsigned char op;           /* operation, extra bits, table bits */
     unsigned char bits;         /* bits in this part of the code */
+    unsigned char op;           /* operation, extra bits, table bits */
     unsigned short val;         /* offset in table or code value */
 } code;
 
