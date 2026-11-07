@@ -1,6 +1,6 @@
 zlib-turbo is an altered version of zlib.
 
-It is based on zlib 1.3.2, (C) 1995-2026 Jean-loup Gailly and Mark Adler, and is not the original zlib. Its
+It is based on zlib 1.4, (C) 1995-2026 Jean-loup Gailly and Mark Adler, and is not the original zlib. Its
 changes are (C) 2026 Yingquan (Cody) Wu and are under the same zlib license (see LICENSE).
 
 The changes are in inffast.c, inflate.c, infback.c, inftrees.h, adler32.c, crc32.c, deflate.c, trees.c and zutil.c,

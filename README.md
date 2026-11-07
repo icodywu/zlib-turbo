@@ -4,10 +4,16 @@
 
 **zlib, faster, and byte for byte the same.**
 
-zlib-turbo is zlib 1.3.2 with faster decompression and compression. It has the same API, the same ABI and the
+zlib-turbo is zlib 1.4 with faster decompression and compression. It has the same API, the same ABI and the
 same headers (`zlib.h` is unchanged), and it produces the same compressed bytes as zlib for every input at every
-setting zlib has. It decompresses every stream, valid or damaged, with the same output and the same errors. You can
-put it in place of zlib in a program, a package or a whole system, and nothing else changes except the speed.
+setting zlib has.[^resetkeep] It decompresses every stream, valid or damaged, with the same output and the same
+errors. You can put it in place of zlib in a program, a package or a whole system, and nothing else changes except
+the speed.
+
+[^resetkeep]: With one exception, where zlib 1.4's output is wrong: after `deflateResetKeep()` in the middle of a
+    stream, zlib 1.4 can write a match whose third byte differs from the data, and zlib-turbo does not (see the
+    ChangeLog). The speed figures below were measured against zlib 1.3.2; zlib 1.4 changed neither the speed nor the
+    output of deflate and inflate.
 
 | AMD EPYC 9334, GCC 14 -O2, one core unless noted | zlib 1.3.2 | zlib-turbo | |
 |---|---:|---:|---:|
@@ -353,16 +359,17 @@ loop is used on 64-bit targets and 32-bit x86; on other 32-bit targets inflate i
 The scripts in [`turbo/`](turbo) compare any two zlib source trees:
 
 ```sh
-git clone https://github.com/madler/zlib zlib-1.3.2 && git -C zlib-1.3.2 checkout v1.3.2
-sh turbo/tests/run_compress.sh zlib-1.3.2 . silesia/      # identical output and compression speed, levels 0 to 9
-sh turbo/bench/run_speed.sh zlib-1.3.2 . silesia/ > speed.txt && python3 turbo/bench/summarize.py speed.txt
-sh turbo/tests/run_stress.sh zlib-1.3.2 . inputs/         # damaged streams, under the sanitizers
-sh turbo/tests/run_dict.sh zlib-1.3.2 . silesia/xml      # prepared dictionaries
-sh turbo/tests/run_threads.sh . 8 silesia/*               # threads: the same bytes as one thread
-sh turbo/tests/run_opt.sh zlib-1.3.2 . silesia/*           # levels 10 to 12: round trips, also through zlib
+git clone https://github.com/madler/zlib zlib-1.4 && git -C zlib-1.4 checkout v1.4
+sh turbo/tests/run_compress.sh zlib-1.4 . silesia/      # identical output and compression speed, levels 0 to 9
+sh turbo/bench/run_speed.sh zlib-1.4 . silesia/ > speed.txt && python3 turbo/bench/summarize.py speed.txt
+sh turbo/tests/run_stress.sh zlib-1.4 . inputs/         # damaged streams, under the sanitizers
+sh turbo/tests/run_dict.sh zlib-1.4 . silesia/xml      # prepared dictionaries
+sh turbo/tests/run_threads.sh . 8 silesia/*             # threads: the same bytes as one thread
+sh turbo/tests/run_opt.sh zlib-1.4 . silesia/*           # levels 10 to 12: round trips, also through zlib
+sh turbo/tests/run_edge.sh zlib-1.4 . silesia/*          # deflateResetKeep(), exact output space, deflateCopy()
 cc -O2 -DZ_TURBO_SIMD -mpclmul -mavx2 -I. adler32.c crc32.c zutil.c turbo/tests/zsum.c -o zsum && ./zsum check
-TIME=3600 sh turbo/tests/fuzz/run_fuzz.sh zlib-1.3.2 . inputs/          # decompression, differential
-TIME=3600 sh turbo/tests/fuzz/run_fuzz_deflate.sh zlib-1.3.2 . inputs/  # compression, differential
+TIME=3600 sh turbo/tests/fuzz/run_fuzz.sh zlib-1.4 . inputs/          # decompression, differential
+TIME=3600 sh turbo/tests/fuzz/run_fuzz_deflate.sh zlib-1.4 . inputs/  # compression, differential
 ```
 
 ## Relation to zlib
