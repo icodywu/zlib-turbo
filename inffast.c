@@ -256,7 +256,7 @@ void ZLIB_INTERNAL inflate_fast(z_streamp strm, unsigned start) {
     Z_U8 hold8;                 /* 64-bit bit buffer of the fast loop */
     entry_t here8;              /* table entry of the fast loop */
     z_const unsigned char FAR *last8;   /* two refills fit after in */
-    unsigned char FAR *end8;    /* room for a match and fifteen more */
+    unsigned char FAR *end8;    /* room for two literals, a match and 15 more */
 #endif
 
     /* copy state to local variables */
@@ -282,8 +282,10 @@ void ZLIB_INTERNAL inflate_fast(z_streamp strm, unsigned start) {
 
 #if Z_INFLATE_FAST64
     /* Fast loop, while sixteen bytes can be read at in (two refills of
-       eight bytes, the first advancing in by up to seven) and a match plus
-       fifteen bytes fits in the output. Each table lookup comes before the
+       eight bytes, the first advancing in by up to seven) and the output has
+       room for two literals and a match plus fifteen bytes: one iteration can
+       write two literals and then a match, and copy_back() may write fifteen
+       bytes past the match. Each table lookup comes before the
        refill that follows it, so that the lookup's load does not wait for
        the refill's load and shift: the code is looked up in the bits left
        from before, at least 21 (enough for a first-level index), and is then
@@ -292,9 +294,9 @@ void ZLIB_INTERNAL inflate_fast(z_streamp strm, unsigned start) {
        20) and the distance and its extra bits (at most 28) start from at
        least 36 and 56 bits. One refill before the loop gives the first
        lookup its bits, hence the eight more bytes of input. */
-    if (strm->avail_in >= 24 && strm->avail_out >= 258 + 15) {
+    if (strm->avail_in >= 24 && strm->avail_out >= 2 + 258 + 15) {
         last8 = in + (strm->avail_in - 16);
-        end8 = out + (strm->avail_out - (258 + 15));
+        end8 = out + (strm->avail_out - (2 + 258 + 15));
         hold8 = hold;
         hold8 |= load64(in) << bits;
         in += (63 - bits) >> 3;
@@ -441,7 +443,7 @@ void ZLIB_INTERNAL inflate_fast(z_streamp strm, unsigned start) {
                 state->mode = BAD;
                 break;
             }
-        } while (in <= last8 && out < end8);
+        } while (in <= last8 && out <= end8);
 
         /* return the whole bytes not used, leaving fewer than eight bits */
         len = bits >> 3;

@@ -42,6 +42,8 @@ jobs:
         run: sh turbo/tests/run_dict.sh ../zlib-1.4 . ci/large/text
       - name: Levels 10 to 12 decompress, also with stock zlib
         run: sh turbo/tests/run_opt.sh ../zlib-1.4 . ci/synthetic/mixed ci/synthetic/period7 ci/synthetic/random
+      - name: inflate() writes nothing past the output space, at every split
+        run: sh turbo/tests/run_bound.sh .
 
   sanitizers:
     name: Ubuntu Clang sanitizers
@@ -67,6 +69,8 @@ jobs:
         run: DEFS=-DZ_INFLATE_FAST64=0 WORK=./stress-work-0 sh turbo/tests/run_stress.sh ../zlib-1.4 . ci/synthetic
       - name: Levels 10 to 12 under AddressSanitizer and UndefinedBehaviorSanitizer
         run: SAN=address,undefined sh turbo/tests/run_opt.sh ../zlib-1.4 . ci/synthetic/mixed
+      - name: Output space boundaries under AddressSanitizer and UndefinedBehaviorSanitizer
+        run: SAN=address,undefined sh turbo/tests/run_bound.sh . 2
 
   simd:
     name: Ubuntu GCC, SIMD checksums
