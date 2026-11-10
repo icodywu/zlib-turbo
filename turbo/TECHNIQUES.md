@@ -59,7 +59,7 @@ come before each literal/length code, before each distance code and before extra
 first-level table of 9 bits (literals and lengths) or 6 bits (distances). Longer codes need a second lookup. A
 match is copied three bytes per loop step.
 
-**What zlib-turbo does.** A new loop runs first, while at least 16 bytes of input and 273 bytes of output space
+**What zlib-turbo does.** A new loop runs first, while at least 16 bytes of input and 275 bytes of output space
 remain (it starts with 24 bytes of input, for one refill before it). It hands over to zlib's original loop,
 unchanged, for the ends of the buffers.
 
@@ -101,8 +101,10 @@ unchanged, for the ends of the buffers.
     float32 benchmark) decode 3.0 times as fast on the EPYC
     and 8.9 times on the Apple M5 Pro, and the three corpora 2% to 4% faster on the EPYC. Big-endian machines keep
     the step-by-distance copy.
-  - A copy may write up to 15 bytes past the end of the match. That is why the loop needs 258 + 15 bytes of space,
-    and those bytes are overwritten by what follows.
+  - A copy may write up to 15 bytes past the end of the match, and those bytes are overwritten by what follows.
+    One iteration of the loop can write two literals and then a match, so the loop needs 2 + 258 + 15 = 275 bytes
+    of space. Versions 1.0.0 to 1.2.0 required 273, two bytes short: with 273 or 274 bytes left, `inflate()`
+    could write one or two bytes past the output space (fixed in 1.2.1).
   - A match that reaches back past the output of the current `inflate()` call is copied from the sliding window
     sixteen bytes a step, reading and writing nothing outside the bytes copied, instead of through `memcpy()`
     with a short length (version 1.1.0). Both copy functions are forced inline: GCC 14 kept the match copy out of

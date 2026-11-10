@@ -10,6 +10,9 @@ setting zlib has.[^resetkeep] It decompresses every stream, valid or damaged, wi
 errors. You can put it in place of zlib in a program, a package or a whole system, and nothing else changes except
 the speed.
 
+> **Version 1.2.1 fixes a bug in every earlier version:** `inflate()` could write up to two bytes past the output
+> space it was given (see the ChangeLog). Please update.
+
 [^resetkeep]: With one exception, where zlib 1.4's output is wrong: after `deflateResetKeep()` in the middle of a
     stream, zlib 1.4 can write a match whose third byte differs from the data, and zlib-turbo does not (see the
     ChangeLog).
@@ -364,24 +367,27 @@ and 64 KiB output pieces decompression gains 19% to 27% (gzip) and 11% to 14% (z
 
 ## How it was tested
 
-Every test compares zlib-turbo with unmodified zlib, not only with expected output: zlib 1.4 for version 1.2.0, and
-zlib 1.3.2 before. The table describes the tests and the counts of the 1.0 and 1.1 releases. For 1.2.0 they ran
-again against zlib 1.4: identical output on the three corpora with GCC 14, GCC 11 `-m32`, clang 18, `-march=native`
-with the SIMD checksums and `FASTEST` (and levels 10 to 12 the same bytes as 1.1.0); the damaged-stream and
-input-used tests on x86-64 (also strict, with zlib's decoder, under the sanitizers), 32-bit x86, and arm64, ARMv5,
-ppc64le and big-endian s390x under QEMU, and natively on an Apple M5 Pro under AddressSanitizer and
-UndefinedBehaviorSanitizer; threads, dictionaries and levels 10 to 12, also under the sanitizers and
-ThreadSanitizer; `make test` with `ZLIB_DEBUG`; and differential fuzzing against zlib 1.4, 225 million inflate runs
-and 11 million deflate runs under AddressSanitizer and UndefinedBehaviorSanitizer, without a difference or a report.
-A new test, `turbo/tests/zedge.c`, covers zlib 1.4's changes where zlib-turbo has code of its own:
-`deflateResetKeep()` in the middle of a stream (every stream inflates to its input; threads give the bytes of one
-thread), `deflate()` filling the output space exactly (zlib's return codes), and `deflateCopy()` at levels 10 to 12.
+Every test compares zlib-turbo with unmodified zlib, not only with expected output: zlib 1.4 for versions 1.2.0 and
+1.2.1, and zlib 1.3.2 before. Version 1.2.1 adds a test that earlier versions fail: `turbo/tests/zbound.c` puts the
+end of the output space at every position of a stream and checks the bytes after it (the "Output space" row). The
+table describes the tests and the counts of the 1.0 and 1.1 releases. For 1.2.0 they ran again against zlib 1.4:
+identical output on the three corpora with GCC 14, GCC 11 `-m32`, clang 18, `-march=native` with the SIMD checksums
+and `FASTEST` (and levels 10 to 12 the same bytes as 1.1.0); the damaged-stream and input-used tests on x86-64 (also
+strict, with zlib's decoder, under the sanitizers), 32-bit x86, and arm64, ARMv5, ppc64le and big-endian s390x under
+QEMU, and natively on an Apple M5 Pro under AddressSanitizer and UndefinedBehaviorSanitizer; threads, dictionaries
+and levels 10 to 12, also under the sanitizers and ThreadSanitizer; `make test` with `ZLIB_DEBUG`; and differential
+fuzzing against zlib 1.4, 225 million inflate runs and 11 million deflate runs under AddressSanitizer and
+UndefinedBehaviorSanitizer, without a difference or a report. A new test, `turbo/tests/zedge.c`, covers zlib 1.4's
+changes where zlib-turbo has code of its own: `deflateResetKeep()` in the middle of a stream (every stream inflates
+to its input; threads give the bytes of one thread), `deflate()` filling the output space exactly (zlib's return
+codes), and `deflateCopy()` at levels 10 to 12.
 
 | Test | What it checks |
 |---|---|
 | Identical output | All files of the three corpora at levels 0 to 9: the same compressed bytes, built with GCC 14, GCC 11 (also 32-bit), clang 18, `-march=native` with the SIMD checksums, and `FASTEST`. |
 | Damaged streams | 34,860 corrupted streams (bit flips, overwritten bytes, truncations) in random input and output pieces: the same return code, output length and CRC as zlib for each. |
 | Valid streams | 2,809 checks over 11 compression settings, in one call, in random pieces each in a buffer of its own size, and with `inflateBack()`. |
+| Output space | Streams of periodic data, inflated at every split of their output: the first call stops after any number of bytes, the second gets 258 to 600 bytes of output space followed by 32 bytes of pattern that must be left alone, the third the rest. About a million splits per seed, three seeds, with the fast loop and with zlib's decoder; in CI also under AddressSanitizer and UndefinedBehaviorSanitizer. Added in 1.2.1: versions 1.0.0 to 1.2.0 wrote up to two bytes past the output space here. |
 | Input used | Raw, zlib and gzip streams with other bytes after them, in input and output pieces down to one byte: after every `inflate()` call the same return code and the same input and output left as zlib's, and so the same input used at the end of each stream, which a zip reader relies on to find where an entry ends. |
 | Memory checkers | All of the above under AddressSanitizer and UndefinedBehaviorSanitizer, also built with `INFLATE_STRICT`, `INFLATE_ALLOW_INVALID_DISTANCE_TOOFAR_ARRR` and `PKZIP_BUG_WORKAROUND`. |
 | Architectures | The same results on x86-64, 32-bit x86, arm64, ARMv5, ARMv7, ppc64le, big-endian s390x and big-endian 32-bit MIPS (QEMU), on 32-bit ARM and MIPS with zlib's decoder (their default) and with the 64-bit loop forced on, also with the eight-byte Adler-32 forced on where it is off by default, and with MSVC 2022 on Windows. |
