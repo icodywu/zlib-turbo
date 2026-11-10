@@ -19,13 +19,13 @@ the speed.
 
 | AMD EPYC 9334, GCC 14 -O2, one core unless noted | zlib 1.4 | zlib-turbo | |
 |---|---:|---:|---:|
-| Decompression, Silesia (level 6 streams) | 440 MB/s | 785 MB/s | **+78%** |
-| Decompression, enwik8 (level 6 streams) | 352 MB/s | 663 MB/s | **+88%** |
+| Decompression, Silesia (level 6 streams) | 440 MB/s | 769 MB/s | **+75%** |
+| Decompression, enwik8 (level 6 streams) | 352 MB/s | 647 MB/s | **+84%** |
 | Compression, Silesia, level 1 | 114 MB/s | 165 MB/s | **+44%** |
 | Compression, Silesia, level 6 | 31.9 MB/s | 37.3 MB/s | **+17%** |
 | Compression, Silesia, level 6, 16 threads | 31.9 MB/s | 181 MB/s | **5.7×** |
 | Smallest output, Silesia (zlib level 9, zlib-turbo level 12) | 67.64 MB | 64.58 MB | **-4.5%** |
-| Decompression, Silesia gzip streams, optional SIMD checksums, `-march=native` | 435 MB/s | 855 MB/s | **+97%** |
+| Decompression, Silesia gzip streams, optional SIMD checksums, `-march=native` | 436 MB/s | 826 MB/s | **+90%** |
 | Decompression, Silesia, Apple M5 Pro (64-bit ARM, Apple clang) | 578 MB/s | 1284 MB/s | **2.2×** |
 | Compressed output, levels 0 to 9 | | | **identical** |
 
@@ -46,7 +46,7 @@ zlib-turbo is more than known speedups applied to zlib. It contributes:
    nearly 35,000 damaged streams, hundreds of millions of differential fuzzing runs, eight processor architectures
    and MSVC (see [How it was tested](#how-it-was-tested)). Most faster zlib-compatible libraries give it up
    (Chromium's copy of zlib keeps it when built with one option; see [Speed](#speed)); zlib-turbo shows how much
-   speed there is without giving it up, in plain C: 77% to 97% in decompression and 5% to 49% in compression on one
+   speed there is without giving it up, in plain C: 72% to 92% in decompression and 5% to 49% in compression on one
    x86 core, decompression 2.1 to 2.3 times as fast on Apple Silicon, and up to 11 times as fast with threads.
 
 2. **Multithreaded compression whose output is zlib's.** At levels 4 to 9 zlib's hash chains depend only on the
@@ -71,7 +71,7 @@ zlib-turbo is more than known speedups applied to zlib. It contributes:
    the output, that `deflateSetDictionary()` gives. Small messages compress up to 4.1 times as fast.
 
 5. **A faster decoder and faster checksums.** A 64-bit fast loop with branch-free refills, larger first-level tables
-   and wide match copies, with short repeats stored from a register, decompresses 77% to 97% faster on x86, with
+   and wide match copies, with short repeats stored from a register, decompresses 72% to 92% faster on x86, with
    zlib's results for every valid and damaged stream. On 64-bit ARM it reads each decoding table entry with one load
    and sums Adler-32 with NEON: 2.1 to 2.3 times as fast as zlib on an Apple M5 Pro, 12% to 18% faster than
    Chromium's zlib and 87% to 92% of the speed of Apple's own libz in macOS. A portable SWAR Adler-32, three multiplications per eight bytes, makes the zlib format's checksum
@@ -103,8 +103,10 @@ matches are found in the same order, the same blocks are emitted, and the same b
 ## Speed
 
 Silesia, Canterbury + Calgary and enwik8 (the first 10^8 bytes of enwik9), each file whole; one core of an AMD EPYC
-9334 (Zen 4, 2.7 GHz), GCC 14.2 `-O2`, best of three rounds, zlib 1.4 against zlib-turbo 1.2.0. MB/s of
-uncompressed data. All runs: [`turbo/results/release_120.txt`](turbo/results/release_120.txt).
+9334 (Zen 4, 2.7 GHz), GCC 14.2 `-O2`, best of three rounds, MB/s of uncompressed data. Compression: zlib 1.4
+against zlib-turbo 1.2.0, whose compression code 1.2.1 and 1.2.2 keep (all runs:
+[`turbo/results/release_120.txt`](turbo/results/release_120.txt)). Decompression: zlib 1.4 against zlib-turbo 1.2.2
+(all runs: [`turbo/results/release_122.txt`](turbo/results/release_122.txt)).
 
 **Compression** (compressed bytes identical to zlib's in every case)
 
@@ -120,13 +122,20 @@ output pieces
 
 | Level | Silesia | Canterbury + Calgary | enwik8 |
 |---|---|---|---|
-| 1 | 414 → 734 (+77%) / 388 → 651 (+68%) | 450 → 836 (+86%) / 422 → 734 (+74%) | 344 → 661 (+92%) / 320 → 558 (+75%) |
-| 6 | 440 → 785 (+78%) / 413 → 704 (+70%) | 475 → 935 (+97%) / 442 → 832 (+88%) | 352 → 663 (+88%) / 330 → 582 (+77%) |
-| 9 | 446 → 790 (+77%) / 417 → 708 (+70%) | 481 → 944 (+96%) / 447 → 837 (+87%) | 353 → 664 (+88%) / 330 → 582 (+77%) |
+| 1 | 414 → 712 (+72%) / 387 → 634 (+64%) | 451 → 815 (+81%) / 422 → 713 (+69%) | 344 → 636 (+85%) / 319 → 541 (+69%) |
+| 6 | 440 → 769 (+75%) / 412 → 691 (+68%) | 475 → 914 (+92%) / 442 → 812 (+84%) | 352 → 647 (+84%) / 330 → 570 (+73%) |
+| 9 | 445 → 775 (+74%) / 416 → 695 (+67%) | 481 → 923 (+92%) / 448 → 816 (+82%) | 353 → 648 (+84%) / 330 → 570 (+73%) |
 
 Gzip streams with the optional SIMD checksums and `-march=native` (both libraries), level 6, one call / pieces:
-Silesia 435 → 855 (+97%) / 410 → 766 (+87%), Canterbury + Calgary 468 → 1047 (+124%) / 440 → 916 (+109%), enwik8
-351 → 712 (+103%) / 330 → 623 (+89%).
+Silesia 436 → 826 (+90%) / 410 → 737 (+80%), Canterbury + Calgary 468 → 1013 (+117%) / 439 → 884 (+101%), enwik8
+350 → 693 (+98%) / 330 → 602 (+83%).
+
+**Other compilers and `-O3`**, the default of zlib's `configure` and CMake: decompression of level 6 zlib streams
+against zlib 1.4, in one call / pieces, Silesia +74% / +67% with GCC 14 `-O3`, +80% / +72% with GCC 11 `-O3`,
++76% / +67% with clang 18 `-O2` and +72% / +64% with clang 18 `-O3`; Canterbury + Calgary and enwik8 gain more, up
+to twice as fast. Versions 1.2.0 and 1.2.1, measured with GCC 14 `-O2` only, decoded 1.5% to 6% slower than 1.1.0
+with these settings. 1.2.2 decodes from 0.2% slower to 2.2% faster than 1.1.0 with every setting; with GCC 14 `-O2`,
+where 1.2.0 and 1.2.1 had gained 2% to 3% over 1.1.0, it is 1.5% to 4% slower than they are (see the ChangeLog).
 
 **On Apple Silicon** (Apple M5 Pro, Apple clang 21 `-O2`, one thread at the highest QoS class, which runs on the
 fastest cores), decompression in MB/s, with Chromium's zlib (its NEON and CRC-32 code), libdeflate and the libz in
@@ -149,9 +158,11 @@ distance 4). Apple's libz stays ahead on the corpora, Chromium's zlib on the ste
 literals and long matches. zlib-turbo's 64-bit ARM code: each decoding table entry read with one load, Adler-32 with
 NEON (52.7 GB/s, against 4.4 for zlib and 24.3 for Apple's libz), and short repeats stored from a register (see
 [`turbo/TECHNIQUES.md`](turbo/TECHNIQUES.md)). All runs: [`turbo/results/release_120.txt`](turbo/results/release_120.txt).
+1.2.1 decodes within 2% of 1.2.0 there, and 1.2.2 compiles to the same 64-bit ARM code as 1.2.1.
 
-The comparisons below were measured with version 1.1.0, against zlib 1.3.2, which has zlib 1.4's speed; since then
-zlib-turbo decompresses 2% to 4% faster on x86 (pattern copies).
+The comparisons below were measured with version 1.1.0, against zlib 1.3.2, which has zlib 1.4's speed. Version
+1.2.2 decompresses the corpora from 0.2% slower to 2.2% faster than 1.1.0 on x86, and data of short repeats up to
+1.5 times as fast (pattern copies).
 
 Other compilers, Silesia level 6, compression / decompression in one call: GCC 11 +14% / +80%, clang 18 +14% /
 +71%. On 32-bit x86, where 64-bit arithmetic is emulated, +8% / +22%. On other 32-bit targets, such as 32-bit ARM,
@@ -380,7 +391,11 @@ fuzzing against zlib 1.4, 225 million inflate runs and 11 million deflate runs u
 UndefinedBehaviorSanitizer, without a difference or a report. A new test, `turbo/tests/zedge.c`, covers zlib 1.4's
 changes where zlib-turbo has code of its own: `deflateResetKeep()` in the middle of a stream (every stream inflates
 to its input; threads give the bytes of one thread), `deflate()` filling the output space exactly (zlib's return
-codes), and `deflateCopy()` at levels 10 to 12.
+codes), and `deflateCopy()` at levels 10 to 12. Version 1.2.2 changes only the decoder. For it the damaged-stream and
+input-used tests ran again against zlib 1.4 with GCC 14 and clang 18 (the damaged streams under AddressSanitizer
+and UndefinedBehaviorSanitizer), with the one-load table entries forced on (`-DZ_ENTRY32=1`), with zlib's decoder,
+and on arm64, ppc64le and big-endian s390x under QEMU; the output-space test and `make test` passed, the first also
+under the sanitizers; and `inftrees.c` built with `MAKEFIXED` writes `inffixed.h` exactly.
 
 | Test | What it checks |
 |---|---|

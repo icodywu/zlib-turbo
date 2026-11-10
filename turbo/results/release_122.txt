@@ -1,0 +1,154 @@
+# zlib-turbo 1.2.2 (on zlib 1.4): the decompression measurements of the README and turbo/TECHNIQUES.md, 2026-11-10.
+# 1.2.2 changes only the decoder, so compression is as in release_120.txt; on 64-bit ARM the decoder compiles to
+# the same code as 1.2.1's, which decodes within 2% of 1.2.0 there (release_120.txt has the Apple M5 Pro runs).
+#
+# One core of an AMD EPYC 9334 (Zen 4, 2.7 GHz), Ubuntu 22.04. Streams made by stock zlib 1.4; Silesia (12 files),
+# Canterbury + Calgary (all files), enwik8; each file whole. zbench: mode 0 = one inflate() call, mode 1 = 16 KiB
+# in / 64 KiB out. The 1.2.2 code is commit cadb28f; its documentation commit changes no code but the version string.
+
+## Decompression, zlib 1.4 -> zlib-turbo 1.2.2, GCC 14.2 -O2 (job relspd122 958923, turbo/bench/run_speed.sh,
+## best of 3 rounds, core 2)
+| corpus | level | one call (MB/s) | 16K in / 64K out (MB/s) |
+|---|---|---|---|
+| silesia | 1 | 414 -> 712 (+72%) | 387 -> 634 (+64%) |
+| cc | 1 | 451 -> 815 (+81%) | 422 -> 713 (+69%) |
+| enwik8 | 1 | 344 -> 636 (+85%) | 319 -> 541 (+69%) |
+| silesia | 6 | 440 -> 769 (+75%) | 412 -> 691 (+68%) |
+| cc | 6 | 475 -> 914 (+92%) | 442 -> 812 (+84%) |
+| enwik8 | 6 | 352 -> 647 (+84%) | 330 -> 570 (+73%) |
+| silesia | 9 | 445 -> 775 (+74%) | 416 -> 695 (+67%) |
+| cc | 9 | 481 -> 923 (+92%) | 448 -> 816 (+82%) |
+| enwik8 | 9 | 353 -> 648 (+84%) | 330 -> 570 (+73%) |
+
+## Decompression of gzip streams, both built with GCC 14.2 -O2 -march=native -DZ_TURBO_SIMD, level 6 (same job)
+| corpus | level | one call (MB/s) | 16K in / 64K out (MB/s) |
+|---|---|---|---|
+| silesia | 6 | 436 -> 826 (+90%) | 410 -> 737 (+80%) |
+| cc | 6 | 468 -> 1013 (+117%) | 439 -> 884 (+101%) |
+| enwik8 | 6 | 350 -> 693 (+98%) | 330 -> 602 (+83%) |
+
+## Across compilers (job relcc122 958924, one node per setting, all four libraries on that node, core 4)
+# zlib 1.4, zlib-turbo 1.1.0 (62280a0), 1.2.1 (f61697c) and 1.2.2 (cadb28f), each built from its sources with
+# lzbench's defines (-DNDEBUG -U_FORTIFY_SOURCE -DZ_TURBO_SIMD -DZ_TURBO_THREADS -pthread, no -march) and
+# turbo/bench/zbench.c; level 6 zlib streams; best of 3 interleaved rounds, MB/s. silesia.tar is the 12 Silesia
+# files as one stream, as lzbench measures it. GCC 11.4, GCC 14.2, AMD clang 18 (ROCm 6.3.3).
+| setting | corpus | mode | zlib 1.4 | 1.1.0 | 1.2.1 | 1.2.2 | 1.2.2 vs zlib 1.4 | vs 1.1.0 | vs 1.2.1 | 1.2.1 vs 1.1.0 |
+|---|---|---|---:|---:|---:|---:|---:|---:|---:|---:|
+| GCC 14 -O2 | silesia.tar | one call | 439.8 | 757.5 | 779.2 | 766.3 | +74.2% | +1.2% | -1.7% | +2.9% |
+| GCC 14 -O2 | silesia.tar | 16K/64K | 411.3 | 684.1 | 700.3 | 688.0 | +67.3% | +0.6% | -1.8% | +2.4% |
+| GCC 14 -O2 | Silesia files | one call | 440.5 | 758.5 | 781.2 | 767.1 | +74.1% | +1.1% | -1.8% | +3.0% |
+| GCC 14 -O2 | Silesia files | 16K/64K | 412.6 | 684.9 | 701.1 | 689.1 | +67.0% | +0.6% | -1.7% | +2.4% |
+| GCC 14 -O2 | Canterbury + Calgary | one call | 472.9 | 897.2 | 918.2 | 904.8 | +91.3% | +0.8% | -1.5% | +2.3% |
+| GCC 14 -O2 | Canterbury + Calgary | 16K/64K | 441.8 | 799.4 | 816.4 | 797.9 | +80.6% | -0.2% | -2.3% | +2.1% |
+| GCC 14 -O2 | enwik8 | one call | 351.9 | 639.7 | 658.8 | 645.3 | +83.4% | +0.9% | -2.0% | +3.0% |
+| GCC 14 -O2 | enwik8 | 16K/64K | 329.4 | 565.1 | 578.5 | 565.8 | +71.8% | +0.1% | -2.2% | +2.4% |
+| GCC 14 -O3 | silesia.tar | one call | 437.9 | 759.9 | 736.8 | 763.4 | +74.3% | +0.5% | +3.6% | -3.0% |
+| GCC 14 -O3 | silesia.tar | 16K/64K | 408.9 | 682.1 | 666.0 | 686.5 | +67.9% | +0.6% | +3.1% | -2.4% |
+| GCC 14 -O3 | Silesia files | one call | 438.8 | 761.4 | 737.4 | 764.5 | +74.2% | +0.4% | +3.7% | -3.2% |
+| GCC 14 -O3 | Silesia files | 16K/64K | 410.3 | 683.3 | 667.0 | 686.9 | +67.4% | +0.5% | +3.0% | -2.4% |
+| GCC 14 -O3 | Canterbury + Calgary | one call | 468.9 | 900.9 | 870.7 | 900.1 | +92.0% | -0.1% | +3.4% | -3.4% |
+| GCC 14 -O3 | Canterbury + Calgary | 16K/64K | 437.4 | 798.8 | 782.6 | 804.5 | +83.9% | +0.7% | +2.8% | -2.0% |
+| GCC 14 -O3 | enwik8 | one call | 348.7 | 646.4 | 617.7 | 645.3 | +85.1% | -0.2% | +4.5% | -4.4% |
+| GCC 14 -O3 | enwik8 | 16K/64K | 324.4 | 565.9 | 547.3 | 567.6 | +75.0% | +0.3% | +3.7% | -3.3% |
+| GCC 11 -O3 | silesia.tar | one call | 428.5 | 769.8 | 734.2 | 773.8 | +80.6% | +0.5% | +5.4% | -4.6% |
+| GCC 11 -O3 | silesia.tar | 16K/64K | 401.8 | 683.8 | 664.6 | 692.9 | +72.4% | +1.3% | +4.3% | -2.8% |
+| GCC 11 -O3 | Silesia files | one call | 429.3 | 770.4 | 734.7 | 774.8 | +80.5% | +0.6% | +5.5% | -4.6% |
+| GCC 11 -O3 | Silesia files | 16K/64K | 402.9 | 684.7 | 665.7 | 695.1 | +72.5% | +1.5% | +4.4% | -2.8% |
+| GCC 11 -O3 | Canterbury + Calgary | one call | 462.4 | 906.1 | 859.1 | 925.7 | +100.2% | +2.2% | +7.8% | -5.2% |
+| GCC 11 -O3 | Canterbury + Calgary | 16K/64K | 430.5 | 804.6 | 772.9 | 819.2 | +90.3% | +1.8% | +6.0% | -3.9% |
+| GCC 11 -O3 | enwik8 | one call | 344.4 | 653.9 | 615.3 | 659.7 | +91.6% | +0.9% | +7.2% | -5.9% |
+| GCC 11 -O3 | enwik8 | 16K/64K | 321.7 | 567.4 | 547.4 | 577.5 | +79.5% | +1.8% | +5.5% | -3.5% |
+| clang 18 -O2 | silesia.tar | one call | 423.6 | 741.7 | 713.1 | 746.9 | +76.3% | +0.7% | +4.7% | -3.9% |
+| clang 18 -O2 | silesia.tar | 16K/64K | 396.1 | 654.8 | 634.3 | 665.1 | +67.9% | +1.6% | +4.9% | -3.1% |
+| clang 18 -O2 | Silesia files | one call | 424.1 | 742.4 | 714.1 | 748.0 | +76.4% | +0.8% | +4.7% | -3.8% |
+| clang 18 -O2 | Silesia files | 16K/64K | 397.1 | 655.6 | 634.9 | 664.7 | +67.4% | +1.4% | +4.7% | -3.2% |
+| clang 18 -O2 | Canterbury + Calgary | one call | 455.8 | 864.5 | 847.2 | 871.6 | +91.2% | +0.8% | +2.9% | -2.0% |
+| clang 18 -O2 | Canterbury + Calgary | 16K/64K | 423.9 | 760.4 | 741.2 | 771.0 | +81.9% | +1.4% | +4.0% | -2.5% |
+| clang 18 -O2 | enwik8 | one call | 335.6 | 618.4 | 594.0 | 624.1 | +86.0% | +0.9% | +5.1% | -3.9% |
+| clang 18 -O2 | enwik8 | 16K/64K | 312.5 | 530.7 | 517.3 | 541.0 | +73.1% | +1.9% | +4.6% | -2.5% |
+| clang 18 -O3 | silesia.tar | one call | 425.6 | 730.4 | 709.1 | 734.3 | +72.5% | +0.5% | +3.6% | -2.9% |
+| clang 18 -O3 | silesia.tar | 16K/64K | 400.5 | 644.2 | 634.4 | 657.1 | +64.1% | +2.0% | +3.6% | -1.5% |
+| clang 18 -O3 | Silesia files | one call | 428.5 | 731.8 | 710.0 | 735.5 | +71.6% | +0.5% | +3.6% | -3.0% |
+| clang 18 -O3 | Silesia files | 16K/64K | 401.9 | 645.0 | 635.3 | 658.0 | +63.7% | +2.0% | +3.6% | -1.5% |
+| clang 18 -O3 | Canterbury + Calgary | one call | 460.3 | 857.7 | 826.8 | 857.1 | +86.2% | -0.1% | +3.7% | -3.6% |
+| clang 18 -O3 | Canterbury + Calgary | 16K/64K | 428.2 | 751.5 | 737.4 | 761.9 | +77.9% | +1.4% | +3.3% | -1.9% |
+| clang 18 -O3 | enwik8 | one call | 339.8 | 610.6 | 589.5 | 613.8 | +80.6% | +0.5% | +4.1% | -3.5% |
+| clang 18 -O3 | enwik8 | 16K/64K | 318.5 | 525.5 | 514.6 | 537.1 | +68.6% | +2.2% | +4.4% | -2.1% |
+
+## Zijin Zhang's float32 inputs (8,000,000 bytes each), level 6 zlib streams, one call, best of 3 (same job), MB/s
+| setting | input | zlib 1.4 | 1.1.0 | 1.2.1 | 1.2.2 |
+|---|---|---:|---:|---:|---:|
+| GCC 14 -O2 | stepped | 1505 | 2885 | 4223 | 4293 |
+| GCC 14 -O2 | quantized | 1325 | 2245 | 2278 | 2302 |
+| GCC 14 -O2 | noisy | 266 | 358 | 372 | 363 |
+| GCC 14 -O3 | stepped | 1494 | 2874 | 4228 | 4329 |
+| GCC 14 -O3 | quantized | 1351 | 2213 | 2211 | 2271 |
+| GCC 14 -O3 | noisy | 266 | 371 | 357 | 368 |
+| GCC 11 -O3 | stepped | 1443 | 2911 | 4193 | 4332 |
+| GCC 11 -O3 | quantized | 1282 | 2145 | 2137 | 2241 |
+| GCC 11 -O3 | noisy | 262 | 366 | 359 | 364 |
+| clang 18 -O2 | stepped | 1488 | 2580 | 2987 | 2942 |
+| clang 18 -O2 | quantized | 1307 | 2024 | 1966 | 2054 |
+| clang 18 -O2 | noisy | 264 | 375 | 359 | 373 |
+| clang 18 -O3 | stepped | 1483 | 2496 | 2885 | 2846 |
+| clang 18 -O3 | quantized | 1313 | 1949 | 1956 | 1991 |
+| clang 18 -O3 | noisy | 270 | 365 | 359 | 368 |
+
+## Ranges over the 40 rows above (corpus x mode x setting)
+# 1.2.1 vs 1.1.0, all settings: -5.9 .. +3.0 % (40 rows)
+# 1.2.1 vs 1.1.0, clang 18 -O2: -3.9 .. -2.0 % (8 rows)
+# 1.2.1 vs 1.1.0, clang 18 -O3: -3.6 .. -1.5 % (8 rows)
+# 1.2.1 vs 1.1.0, GCC 11 -O3: -5.9 .. -2.8 % (8 rows)
+# 1.2.1 vs 1.1.0, GCC 14 -O2: +2.1 .. +3.0 % (8 rows)
+# 1.2.1 vs 1.1.0, GCC 14 -O3: -4.4 .. -2.0 % (8 rows)
+# 1.2.2 vs 1.1.0, all settings: -0.2 .. +2.2 % (40 rows)
+# 1.2.2 vs 1.1.0, clang 18 -O2: +0.7 .. +1.9 % (8 rows)
+# 1.2.2 vs 1.1.0, clang 18 -O3: -0.1 .. +2.2 % (8 rows)
+# 1.2.2 vs 1.1.0, GCC 11 -O3: +0.5 .. +2.2 % (8 rows)
+# 1.2.2 vs 1.1.0, GCC 14 -O2: -0.2 .. +1.2 % (8 rows)
+# 1.2.2 vs 1.1.0, GCC 14 -O3: -0.2 .. +0.7 % (8 rows)
+# 1.2.2 vs 1.2.1, all settings: -2.3 .. +7.8 % (40 rows)
+# 1.2.2 vs 1.2.1, clang 18 -O2: +2.9 .. +5.1 % (8 rows)
+# 1.2.2 vs 1.2.1, clang 18 -O3: +3.3 .. +4.4 % (8 rows)
+# 1.2.2 vs 1.2.1, GCC 11 -O3: +4.3 .. +7.8 % (8 rows)
+# 1.2.2 vs 1.2.1, GCC 14 -O2: -2.3 .. -1.5 % (8 rows)
+# 1.2.2 vs 1.2.1, GCC 14 -O3: +2.8 .. +4.5 % (8 rows)
+
+## lzbench itself, silesia.tar, zlib-turbo levels 1, 6, 9 (job lzabfix 957651): lzbench built as its Makefile builds
+## (-O3), with zlib-turbo 1.1.0, with 1.2.1, and with 1.2.1 plus the four decoder files of cadb28f (inffast.c,
+## inffixed.h, inftrees.c, inftrees.h: the 1.2.2 decoder); same node, 3 interleaved rounds, best of 3, MB/s
+| compiler | zlib-turbo | compress 1 / 6 / 9 | decompress 1 / 6 / 9 |
+|---|---|---|---|
+| GCC 14.2 | 1.1.0 | 165 / 37.1 / 14.3 | 701 / 763 / 769 |
+| GCC 14.2 | 1.2.1 | 167 / 37.1 / 14.3 | 676 / 735 / 741 |
+| GCC 14.2 | 1.2.2 decoder | 167 / 37.2 / 14.4 | 702 / 763 / 768 |
+| GCC 11.4 | 1.1.0 | 167 / 37.2 / 14.3 | 703 / 763 / 769 |
+| GCC 11.4 | 1.2.1 | 165 / 37.1 / 14.3 | 672 / 733 / 739 |
+| GCC 11.4 | 1.2.2 decoder | 165 / 37.1 / 14.3 | 716 / 769 / 775 |
+| clang 18 | 1.1.0 | 170 / 37 / 14.1 | 672 / 730 / 736 |
+| clang 18 | 1.2.1 | 171 / 37 / 14.1 | 653 / 709 / 715 |
+| clang 18 | 1.2.2 decoder | 170 / 37 / 14.1 | 678 / 735 / 740 |
+
+## Tests of the 1.2.2 code against zlib 1.4 (job zttest 957650, GCC 14.2 unless noted)
+# make test (configure build); inftrees.c -DMAKEFIXED output against inffixed.h; turbo/tests/run_stress.sh
+# (damaged streams under ASan + UBSan, input used) with GCC 14, clang 18, -DZ_ENTRY32=1 and -DZ_INFLATE_FAST64=0;
+# turbo/tests/run_bound.sh (output space), plain (3 seeds) and under ASan + UBSan (2 seeds); turbo/tests/run_cross.sh
+# under QEMU in the dockcross images: arm64, s390x (big-endian), ppc64le. Inputs: the 20 files of
+# turbo/tests/make_inputs.py.
+#   make test OK lines: 3
+#   makefixed: inffixed.h identical
+#   stress gcc: decodes with different input or output left after a call: 0 of 2808
+#   stress gcc: 1.4: 10703 messages, 0 held back
+#   stress gcc: ALL OK
+#   stress clang: ALL OK
+#   stress Z_ENTRY32=1: ALL OK
+#   stress FAST64=0: ALL OK
+#   bound: seed 3, 3000 bytes, 1029000 splits: ok
+#   bound: seed 3, 3000 bytes, 1029000 splits: ok
+#   bound san: seed 2, 3000 bytes, 1029000 splits: ok
+#   cross arm64: decodes with different input or output left after a call: 0 of 2808
+#   cross arm64: ALL OK
+#   cross s390x: decodes with different input or output left after a call: 0 of 2808
+#   cross s390x: ALL OK
+#   cross ppc64le: decodes with different input or output left after a call: 0 of 2808
+#   cross ppc64le: ALL OK

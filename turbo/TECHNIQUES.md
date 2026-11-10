@@ -20,7 +20,10 @@ or error message changes, in any build configuration, and checking that by compa
 All measurements here, except those with threads in section 8 and those on 64-bit ARM, are on one core of an AMD
 EPYC 9334 (Zen 4, 2.7 GHz), GCC 14.2 `-O2`, best of two runs. They cover Silesia, Canterbury + Calgary and enwik8,
 each file compressed whole. Speeds are MB/s of uncompressed data. The 64-bit ARM measurements (version 1.2.0) are on
-an Apple M5 Pro, Apple clang 21 `-O2`, one thread at the highest QoS class (the fastest cores).
+an Apple M5 Pro, Apple clang 21 `-O2`, one thread at the highest QoS class (the fastest cores). Since version 1.2.2
+the decoder is also measured with `-O3`, the default of zlib's `configure` and CMake, with GCC 11 and with clang
+18: versions 1.2.0 and 1.2.1, measured with GCC 14 `-O2` only, decoded 1.5% to 6% slower than 1.1.0 with those
+(section 1).
 
 ## What each change gives
 
@@ -38,16 +41,21 @@ Each row adds one commit to the row above it.
 | + 1. window copies inline (1.1.0) |  |  |  | 756 (**+0.5%**) |
 | + 6. compression loops (1.1.0) | 165 (**+9%**) | 37.3 (**+4%**) | 14.4 (**+1%**) |  |
 | + 1. pattern copies (1.2.0) |  |  |  | 785 (**+3%**) |
+| + 1. pattern step from a constant, zlib's entry order on x86 (1.2.2) |  |  |  | 769 (-2%) |
 
 The table is for Silesia; Canterbury + Calgary and enwik8 show the same pattern. Changes 3 to 5 leave
 decompression as it is (row 5, within 0.3%). Three rows are version 1.1.0: the decoder's loop reordered
 and its window copies inline (section 1), which leave compression as it is, and the compression loops (section 6),
 which leave decompression as it is; window copies gain more in 16 KiB / 64 KiB pieces and on the smaller files of
-Canterbury + Calgary. The last row is version 1.2.0, on zlib 1.4, which runs at zlib 1.3.2's speed: matches at
-distances 2 to 7 from a pattern in a register (section 1). All runs, for the three corpora:
+Canterbury + Calgary. The last two rows are versions 1.2.0 and 1.2.2, on zlib 1.4, which runs at zlib 1.3.2's
+speed: matches at distances 2 to 7 from a pattern in a register (section 1), and then the pattern copy's step from a
+constant instead of a division and, on x86, zlib's order of the fields in each table entry. With GCC 14 `-O2` that
+gives back 2%, and the decoder is again at 1.1.0's speed there (-0.2% to +1.2%); with `-O3` and with clang it is
+3% to 8% faster than 1.2.0 and 1.2.1. All runs, for the three corpora:
 [`results/steps_epyc9334.txt`](results/steps_epyc9334.txt); the 1.1.0 rows:
 [`results/speed_epyc9334.txt`](results/speed_epyc9334.txt); the 1.2.0 row and the 64-bit ARM measurements:
-[`results/release_120.txt`](results/release_120.txt).
+[`results/release_120.txt`](results/release_120.txt); the 1.2.2 row and the other compilers:
+[`results/release_122.txt`](results/release_122.txt).
 
 ## 1. Decompression: a 64-bit bit buffer, larger tables and wide copies
 
@@ -98,9 +106,14 @@ unchanged, for the ends of the buffers.
     distance up to eight (8, 6, 8, 5, 6 or 7 bytes), so that no store waits for a load of what the store before
     wrote. Before, each step loaded eight bytes from *distance* bytes back, stored them and advanced by the
     distance. Data made of short repeats gains most: float32 values repeating every four bytes (from Zijin Zhang's
-    float32 benchmark) decode 3.0 times as fast on the EPYC
-    and 8.9 times on the Apple M5 Pro, and the three corpora 2% to 4% faster on the EPYC. Big-endian machines keep
-    the step-by-distance copy.
+    float32 benchmark) decode 3.0 times as fast on the EPYC and 8.9 times on the Apple M5 Pro; the three corpora
+    decode from 0.2% slower to 2.2% faster than with version 1.1.0, over GCC 14 and 11 and clang 18 at `-O2` and
+    `-O3`. Big-endian machines keep the step-by-distance copy.
+  - The step comes from a constant, `(0x76586800 >> 4 * dist) & 15` (version 1.2.2). Versions 1.2.0 and 1.2.1
+    computed it as `8 - 8 % dist`, and with that division in the loop GCC builds at `-O3`, the default of zlib's
+    `configure` and CMake, decoded 4% to 7% slower on the EPYC; with GCC 14 `-O2`, where 1.2.0 was measured, the
+    division was 1.5% to 2.3% faster. 64-bit ARM keeps the division, 1% to 4% faster there in 16 KiB / 64 KiB pieces
+    (Apple clang).
   - A copy may write up to 15 bytes past the end of the match, and those bytes are overwritten by what follows.
     One iteration of the loop can write two literals and then a match, so the loop needs 2 + 258 + 15 = 275 bytes
     of space. Versions 1.0.0 to 1.2.0 required 273, two bytes short: with 273 or 274 bytes left, `inflate()`
@@ -114,13 +127,15 @@ unchanged, for the ends of the buffers.
 - **Table entries as one load, on 64-bit ARM** (version 1.2.0). A decoding table entry is four bytes: the code's
   bit count, an operation and a value. clang reads the three through a pointer as three loads, after computing the
   entry's address, and then shifts the bit buffer by the loaded bit count: every literal waits for an address
-  computation, a load and a shift. zlib-turbo puts the bit count first in the entry (`inftrees.h`; `inffixed.h`
-  follows) and on 64-bit ARM reads the entry as one little-endian 32-bit word, with the table index folded into the
-  load. The bit buffer then shifts by the word itself, since shifts use only the low six bits of their count, and
-  the operation and value come from it with a shift or a mask off the chain. On the Apple M5 Pro, decompression
-  gains 12% to 14% on the three corpora and 22% on literal-heavy data. On the EPYC with GCC 14 the same reads were
-  0% to 4% slower (Canterbury + Calgary), so other targets read the fields through a pointer as before.
-  `-DZ_ENTRY32=1` or `=0` overrides the choice; 1 needs a little-endian machine.
+  computation, a load and a shift. On 64-bit ARM zlib-turbo puts the bit count first in the entry (`inftrees.h`;
+  `inffixed.h` writes its entries with `ZT_CODE()`, which follows the order) and reads the entry as one
+  little-endian 32-bit word, with the table index folded into the load. The bit buffer then shifts by the word
+  itself, since shifts use only the low six bits of their count, and the operation and value come from it with a
+  shift or a mask off the chain. On the Apple M5 Pro, decompression gains 12% to 14% on the three corpora and 22% on
+  literal-heavy data. On the EPYC with GCC 14 the same reads were 0% to 4% slower (Canterbury + Calgary), so other
+  targets read the fields through a pointer as before, from entries in zlib's order: versions 1.2.0 and 1.2.1 put
+  the bit count first on every target, and clang builds for x86 decoded 3% to 4% slower with it (GCC builds within
+  1%). `-DZ_ENTRY32=1` or `=0` overrides the choice, and the order follows it; 1 needs a little-endian machine.
 
 **Why the results are the same.** The tables decode the same codes; only the split between first and second level
 differs. Every check runs at the same point with the same message:
@@ -459,6 +474,8 @@ Each was kept only if it was faster (for levels 10 to 12: smaller) without being
 | Fetch the next code before copying a match | common in fast decoders | 32-bit x86 -5% to -8%; 64-bit with GCC 14 -1% to -3% in one call, +1% to +2% in pieces; clang +4% |
 | Read each decoding table entry by value (a local `code`) instead of through a pointer, on x86 | Apple's `zopt_inffast.c` | -1% to -2% on Silesia, -9% on matches of mean length 47 (GCC 14); on 64-bit ARM superseded by the one-load reads of section 1 |
 | One 32-bit load per decoding table entry, on x86 | | 0% to -4% (Canterbury + Calgary) with GCC 14; kept on 64-bit ARM (section 1), +12% to +22% there |
+| The bit count first in every decoding table entry, on x86 too (versions 1.2.0 and 1.2.1) | | clang 18 -3% to -4%, GCC within 1%; kept on 64-bit ARM, where entries are read as one load |
+| The pattern copy's step computed as `8 - 8 % dist` (versions 1.2.0 and 1.2.1) | | GCC 14 `-O2` +1.5% to +2.3%; GCC 14 and 11 `-O3` -4% to -7%; kept on 64-bit ARM, +1% to +4% in pieces there |
 | Index the dictionary faster in `deflateSetDictionary()` | | at most 1% to 3%: indexing takes about 2.5 cycles per position, bound by memory writes |
 | Clear only the hash slots a small stream used, in `deflateReset()` | | clearing takes 0.6 µs of the 4 to 9 µs a message of 64 to 256 bytes costs; not worth the code |
 | Threads: search every position for every possible match to beat, instead of following the parse | | 1.8 MB/s at level 9 with two threads, far below one thread: most of the work is for positions the parse skips |

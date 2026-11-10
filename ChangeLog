@@ -1,6 +1,27 @@
 
                 ChangeLog file for zlib
 
+Changes in zlib-turbo 1.2.2, an altered version of zlib 1.4
+- inflate() on x86 is as fast built with -O3, the default of zlib's
+  configure and CMake, or with clang as built with GCC -O2. 1.2.0 and
+  1.2.1, measured with GCC 14 -O2 only, decoded 1.5% to 6% slower than 1.1.0
+  there (lzbench builds with -O3). Two changes of 1.2.0 caused it. The
+  pattern copy for distances 2 to 7 computed its step as 8 - 8 % dist, and
+  with that division in the fast loop GCC builds at -O3 decoded 4% to 7%
+  slower; the step now comes from a constant, except on 64-bit ARM, where
+  the division is faster. And the code struct put the bit count first on
+  every target, an order clang builds for x86 decoded 3% to 4% slower with;
+  it is now first only where the fast loop reads each entry as one 32-bit
+  load (Z_ENTRY32, 64-bit ARM by default), and inffixed.h writes its
+  entries with ZT_CODE(), which follows the order
+- Against 1.1.0 on an AMD EPYC 9334, decompression now ranges from -0.2%
+  to +2.2% over GCC 14 -O2 and -O3, GCC 11 -O3 and clang 18 -O2 and -O3
+  (1.2.1: -5.9% to +3.0%). With GCC 14 -O2, where 1.2.0 and 1.2.1 had
+  gained 2% to 3%, it is 1.5% to 4% slower than they are. Data of short
+  repeats keeps 1.2's gains. On 64-bit ARM the decoder compiles to the same
+  code as 1.2.1's
+- turbo/results/release_122.txt has the measurements
+
 Changes in zlib-turbo 1.2.1, an altered version of zlib 1.4
 - Fix inflate() writing up to two bytes past the output space it was given,
   in every version since 1.0.0. One iteration of the 64-bit fast loop can
