@@ -28,28 +28,10 @@
 #  define COPY_INLINE
 #endif
 
-/* A table entry in the fast loop. On 64-bit ARM it is read by value, as one
-   32-bit load with the bit count in the low byte (see inftrees.h), so that
-   the bit buffer shifts by the entry's register as it is, shifts using only
-   its low six bits: decoding is 12% to 22% faster on an Apple M5 than with
-   the fields read through a pointer, which clang loads one by one. Elsewhere
-   the fields are read through a pointer, which is as fast or faster on x86
-   with GCC. Define Z_ENTRY32 as 1 or 0 to choose; 1 needs a little-endian
-   machine. */
-#ifndef Z_ENTRY32
-#  if (defined(__aarch64__) || defined(_M_ARM64)) && \
-      ((defined(__BYTE_ORDER__) && \
-        __BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__) || defined(_MSC_VER))
-#    define Z_ENTRY32 1
-#  else
-#    define Z_ENTRY32 0
-#  endif
-#endif
-#if Z_ENTRY32 && defined(__BYTE_ORDER__) && \
-    __BYTE_ORDER__ == __ORDER_BIG_ENDIAN__
-#  undef Z_ENTRY32
-#  define Z_ENTRY32 0
-#endif
+/* A table entry in the fast loop. Where Z_ENTRY32 is 1 (64-bit ARM by
+   default, see inftrees.h) it is read by value, as one 32-bit load with the
+   bit count in the low byte, so that the bit buffer shifts by the entry's
+   register as it is. Elsewhere the fields are read through a pointer. */
 #if Z_ENTRY32
 typedef unsigned entry_t;
 local entry_t entry32(const code FAR *c) {
@@ -125,12 +107,19 @@ local COPY_INLINE unsigned char FAR *copy_back(unsigned char FAR *out,
     /* dist 2..7: on a little-endian machine, the dist bytes before out
        repeated in a register and stored eight bytes at a time, advancing by
        the largest multiple of dist up to eight, so that no step reads what
-       the one before wrote */
+       the one before wrote. The step, 8 - 8 % dist, is 8, 6, 8, 5, 6, 7 for
+       dist 2 to 7. It comes from a constant, as with the division GCC builds
+       at -O3 decoded 4% to 7% slower on x86, except on 64-bit ARM, where the
+       division is 1% to 4% faster in 16K/64K pieces (Apple M5, clang). */
     {
         Z_U8 v = 1;
 
         if (*(unsigned char *)&v) {
+#if defined(__aarch64__) || defined(_M_ARM64)
             unsigned step = 8 - 8 % dist;
+#else
+            unsigned step = (0x76586800U >> (dist << 2)) & 15;
+#endif
 
             zmemcpy(&v, from, 8);
             v &= ((Z_U8)1 << (dist << 3)) - 1;

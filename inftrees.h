@@ -20,15 +20,46 @@
    the number of bits in this code or part of the code to drop off
    of the bit buffer.  val is the actual byte to output in the case
    of a literal, the base length or distance, or the offset from
-   the current table to the next table.  Each entry is four bytes.
-   zlib-turbo: bits comes first, so that inffast.c can shift the bit buffer
-   by an entry read as one 32-bit word (see Z_ENTRY32 there); inffixed.h
-   follows that order. */
+   the current table to the next table.  Each entry is four bytes. */
+
+/* zlib-turbo: where Z_ENTRY32 is 1, the fast loop in inffast.c reads each
+   table entry as one little-endian 32-bit word, and bits comes first in the
+   entry, so that the bit buffer shifts by the word as it is. That is the
+   default on 64-bit ARM, where it makes decoding 12% to 22% faster on an
+   Apple M5 than reading the fields through a pointer. Elsewhere the entry
+   keeps zlib's order, op first: with bits first, clang builds for x86 decode
+   3% to 4% slower. Define Z_ENTRY32 as 1 or 0 to choose; 1 needs a
+   little-endian machine. ZT_CODE() writes an entry in either order, for
+   inffixed.h. */
+#ifndef Z_ENTRY32
+#  if (defined(__aarch64__) || defined(_M_ARM64)) && \
+      ((defined(__BYTE_ORDER__) && \
+        __BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__) || defined(_MSC_VER))
+#    define Z_ENTRY32 1
+#  else
+#    define Z_ENTRY32 0
+#  endif
+#endif
+#if Z_ENTRY32 && defined(__BYTE_ORDER__) && \
+    __BYTE_ORDER__ == __ORDER_BIG_ENDIAN__
+#  undef Z_ENTRY32
+#  define Z_ENTRY32 0
+#endif
+#if Z_ENTRY32
 typedef struct {
     unsigned char bits;         /* bits in this part of the code */
     unsigned char op;           /* operation, extra bits, table bits */
     unsigned short val;         /* offset in table or code value */
 } code;
+#  define ZT_CODE(bits, op, val) {bits, op, val}
+#else
+typedef struct {
+    unsigned char op;           /* operation, extra bits, table bits */
+    unsigned char bits;         /* bits in this part of the code */
+    unsigned short val;         /* offset in table or code value */
+} code;
+#  define ZT_CODE(bits, op, val) {op, bits, val}
+#endif
 
 /* op values as set by inflate_table():
     00000000 - literal
