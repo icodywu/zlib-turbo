@@ -1,6 +1,27 @@
 
                 ChangeLog file for zlib
 
+Changes in zlib-turbo 1.2.3, an altered version of zlib 1.4
+- Fix inflateBack() decoding some valid streams wrong, in every version
+  since 1.0.0. inflateBack() decodes into its window, and once the window
+  has wrapped, the bytes past the end of a match are history that a later
+  match may copy. The 64-bit fast loop's match copy may write up to 15
+  bytes past the end of the match, so a match from 32,754 to 32,768 bytes
+  back right after a match copied from the output could copy overwritten
+  bytes. zlib's deflate never makes distances above 32,506, so streams made
+  by zlib or zlib-turbo decode right; streams from other encoders could
+  decode wrong, with no error from inflateBack() itself (a gzip or zlib
+  check value would catch it). inflate() was not affected. inflateBack()
+  now uses zlib's loop only, as in zlib's development branch, where Mark
+  Adler found the same bug in the code of pull request #793 (00dd07f).
+  inflate_fast() calls one of two copies of the decoder, so that the copy
+  inflate() uses compiles as before
+- turbo/tests/zback.c writes such a stream itself and decodes it with
+  inflateBack() and inflate(); turbo/tests/run_bound.sh and CI run it.
+  Versions 1.0.0 to 1.2.2 fail it
+- turbo/results/release_123.txt has the measurements: inflate() decodes
+  as fast as with 1.2.2
+
 Changes in zlib-turbo 1.2.2, an altered version of zlib 1.4
 - inflate() on x86 is as fast built with -O3, the default of zlib's
   configure and CMake, or with clang as built with GCC -O2. 1.2.0 and

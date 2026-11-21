@@ -10,8 +10,9 @@ setting zlib has.[^resetkeep] It decompresses every stream, valid or damaged, wi
 errors. You can put it in place of zlib in a program, a package or a whole system, and nothing else changes except
 the speed.
 
-> **Version 1.2.1 fixes a bug in every earlier version:** `inflate()` could write up to two bytes past the output
-> space it was given (see the ChangeLog). Please update.
+> **Version 1.2.3 fixes a bug in every earlier version:** `inflateBack()` could decode some valid streams wrong.
+> Streams made by zlib or zlib-turbo are not affected, and neither is `inflate()` (see the ChangeLog). Version 1.2.1
+> fixed another: `inflate()` could write up to two bytes past the output space it was given. Please update.
 
 [^resetkeep]: With one exception, where zlib 1.4's output is wrong: after `deflateResetKeep()` in the middle of a
     stream, zlib 1.4 can write a match whose third byte differs from the data, and zlib-turbo does not (see the
@@ -211,6 +212,8 @@ Ten changes to zlib:
    Larger first-level decoding tables (10 bits for literals and lengths, 8 for distances) make second lookups rare;
    on 64-bit ARM each entry is read with one 32-bit load. The existing loop finishes near the buffer ends exactly as
    before. Both are used on 64-bit targets and 32-bit x86; other 32-bit targets keep zlib's decoder by default.
+   `inflateBack()`, which decodes into its window, uses zlib's loop only. The fast loop and the larger tables were
+   offered to zlib as pull request #793 and are in zlib's development branch since November 2026.
 2. **Adler-32 eight bytes at a time** (`adler32.c`) on 64-bit targets: one multiplication sums eight bytes and two
    weight them, with a modulo only every 2^20 bytes; on 64-bit ARM, 32 bytes at a time with NEON. This speeds up both
    directions for the zlib format.
@@ -395,7 +398,10 @@ codes), and `deflateCopy()` at levels 10 to 12. Version 1.2.2 changes only the d
 input-used tests ran again against zlib 1.4 with GCC 14 and clang 18 (the damaged streams under AddressSanitizer
 and UndefinedBehaviorSanitizer), with the one-load table entries forced on (`-DZ_ENTRY32=1`), with zlib's decoder,
 and on arm64, ppc64le and big-endian s390x under QEMU; the output-space test and `make test` passed, the first also
-under the sanitizers; and `inftrees.c` built with `MAKEFIXED` writes `inffixed.h` exactly.
+under the sanitizers; and `inftrees.c` built with `MAKEFIXED` writes `inffixed.h` exactly. Version 1.2.3 adds a
+test that earlier versions fail: `turbo/tests/zback.c` decodes a stream whose matches reach back further than zlib's
+deflate ever does (the "Window history" row). It passed with GCC 14, clang and 32-bit GCC 11, the first two also under
+AddressSanitizer and UndefinedBehaviorSanitizer, and so did the output-space test and `make test`.
 
 | Test | What it checks |
 |---|---|
@@ -403,6 +409,7 @@ under the sanitizers; and `inftrees.c` built with `MAKEFIXED` writes `inffixed.h
 | Damaged streams | 34,860 corrupted streams (bit flips, overwritten bytes, truncations) in random input and output pieces: the same return code, output length and CRC as zlib for each. |
 | Valid streams | 2,809 checks over 11 compression settings, in one call, in random pieces each in a buffer of its own size, and with `inflateBack()`. |
 | Output space | Streams of periodic data, inflated at every split of their output: the first call stops after any number of bytes, the second gets 258 to 600 bytes of output space followed by 32 bytes of pattern that must be left alone, the third the rest. About a million splits per seed, three seeds, with the fast loop and with zlib's decoder; in CI also under AddressSanitizer and UndefinedBehaviorSanitizer. Added in 1.2.1: versions 1.0.0 to 1.2.0 wrote up to two bytes past the output space here. |
+| Window history | A stream written by the test itself: 40,000 literals, then 20,000 pairs of matches, the first from 16 to 399 bytes back and the second from 32,754 to 32,768 bytes back (zlib's deflate stops at 32,506), decoded with `inflateBack()` and `inflate()`, with all its input at once and a byte at a time. Three seeds, with the fast loop and with zlib's decoder; in CI also under AddressSanitizer and UndefinedBehaviorSanitizer. Added in 1.2.3: versions 1.0.0 to 1.2.2 decode it wrong with `inflateBack()`. |
 | Input used | Raw, zlib and gzip streams with other bytes after them, in input and output pieces down to one byte: after every `inflate()` call the same return code and the same input and output left as zlib's, and so the same input used at the end of each stream, which a zip reader relies on to find where an entry ends. |
 | Memory checkers | All of the above under AddressSanitizer and UndefinedBehaviorSanitizer, also built with `INFLATE_STRICT`, `INFLATE_ALLOW_INVALID_DISTANCE_TOOFAR_ARRR` and `PKZIP_BUG_WORKAROUND`. |
 | Architectures | The same results on x86-64, 32-bit x86, arm64, ARMv5, ARMv7, ppc64le, big-endian s390x and big-endian 32-bit MIPS (QEMU), on 32-bit ARM and MIPS with zlib's decoder (their default) and with the 64-bit loop forced on, also with the eight-byte Adler-32 forced on where it is off by default, and with MSVC 2022 on Windows. |

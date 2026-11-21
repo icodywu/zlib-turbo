@@ -118,6 +118,13 @@ unchanged, for the ends of the buffers.
     One iteration of the loop can write two literals and then a match, so the loop needs 2 + 258 + 15 = 275 bytes
     of space. Versions 1.0.0 to 1.2.0 required 273, two bytes short: with 273 or 274 bytes left, `inflate()`
     could write one or two bytes past the output space (fixed in 1.2.1).
+  - `inflateBack()` decodes into its window, and once the window has wrapped, the bytes past the end of a match
+    are history that a later match may copy. It therefore uses zlib's loop only (version 1.2.3). Versions 1.0.0 to
+    1.2.2 ran the fast loop there too, and a match from 32,754 to 32,768 bytes back right after a match copied
+    from the output could copy bytes the first copy had overwritten. zlib's deflate never makes distances above
+    32,506, so only streams from other encoders were affected. `inflate_fast()` calls one of two copies of the
+    decoder, so that the copy `inflate()` uses compiles as before: a test inside the decoder made GCC 14 allocate
+    its registers differently and decode 1% to 3% slower.
   - A match that reaches back past the output of the current `inflate()` call is copied from the sliding window
     sixteen bytes a step, reading and writing nothing outside the bytes copied, instead of through `memcpy()`
     with a short length (version 1.1.0). Both copy functions are forced inline: GCC 14 kept the match copy out of
