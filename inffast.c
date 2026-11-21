@@ -215,7 +215,11 @@ local COPY_INLINE unsigned char FAR *copy_window(unsigned char FAR *out,
       requires strm->avail_out >= 258 for each loop to avoid checking for
       output space.
  */
+#if Z_INFLATE_FAST64
+local COPY_INLINE void decode(z_streamp strm, unsigned start, int loop64) {
+#else
 void ZLIB_INTERNAL inflate_fast(z_streamp strm, unsigned start) {
+#endif
     struct inflate_state FAR *state;
     z_const unsigned char FAR *in;      /* local strm->next_in */
     z_const unsigned char FAR *last;    /* have enough input while in < last */
@@ -282,8 +286,9 @@ void ZLIB_INTERNAL inflate_fast(z_streamp strm, unsigned start) {
        and the distance lookup, so that the length and its extra bits (at most
        20) and the distance and its extra bits (at most 28) start from at
        least 36 and 56 bits. One refill before the loop gives the first
-       lookup its bits, hence the eight more bytes of input. */
-    if (strm->avail_in >= 24 && strm->avail_out >= 2 + 258 + 15) {
+       lookup its bits, hence the eight more bytes of input. Not for
+       inflateBack() (loop64 == 0), see inflate_fast() below. */
+    if (loop64 && strm->avail_in >= 24 && strm->avail_out >= 2 + 258 + 15) {
         last8 = in + (strm->avail_in - 16);
         end8 = out + (strm->avail_out - (2 + 258 + 15));
         hold8 = hold;
@@ -655,6 +660,39 @@ void ZLIB_INTERNAL inflate_fast(z_streamp strm, unsigned start) {
     state->bits = bits;
     return;
 }
+
+#if Z_INFLATE_FAST64
+#if defined(__GNUC__)
+#  define NO_INLINE __attribute__((noinline))
+#elif defined(_MSC_VER)
+#  define NO_INLINE __declspec(noinline)
+#else
+#  define NO_INLINE
+#endif
+
+local NO_INLINE void decode64(z_streamp strm, unsigned start) {
+    decode(strm, start, 1);
+}
+
+local NO_INLINE void decode_back(z_streamp strm, unsigned start) {
+    decode(strm, start, 0);
+}
+
+/* inflateBack() decodes into the window itself. There, once the window has
+   wrapped, the bytes past out are history that later matches may still copy,
+   so nothing may be written past the end of a match, and the fast loop is not
+   used. The two cases are separate functions so that the one inflate() uses
+   is compiled exactly as without this test. */
+void ZLIB_INTERNAL inflate_fast(z_streamp strm, unsigned start) {
+    struct inflate_state FAR *state = (struct inflate_state FAR *)strm->state;
+
+    if (state->window != Z_NULL &&
+        strm->next_out + strm->avail_out == state->window + state->wsize)
+        decode_back(strm, start);
+    else
+        decode64(strm, start);
+}
+#endif
 
 /*
    inflate_fast() speedups that turned out slower (on a PowerPC G3 750CXe):
